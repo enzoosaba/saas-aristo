@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+data
+.npm-cache
+.env*
+artifacts
+test-results
