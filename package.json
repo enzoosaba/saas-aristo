@@ -5,8 +5,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "start": "node scripts/start.mjs",
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:e2e": "node scripts/run-e2e.mjs",
+    "test:quality": "node artifacts/quality.mjs",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write src tests scripts next.config.ts",
+    "verify": "npm run lint && npm run typecheck && npm test",
+    "prepare": "husky",
+    "backup": "node scripts/backup.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.41.0",
@@ -16,14 +24,21 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^22.20.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
+    "husky": "^9.1.7",
+    "lighthouse": "^13.4.1",
     "playwright": "^1.63.0",
+    "prettier": "^3.9.6",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }
