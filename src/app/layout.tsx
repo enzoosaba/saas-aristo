@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { Onest, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./theme.css";
+import "./functional.css";
 import ScrollEffects from "@/components/ScrollEffects";
 import StudentOverview from "@/components/StudentOverview";
 import DashboardSidebar from "@/components/ui/dashboard-sidebar";
 import MainNav from "@/components/MainNav";
+import StudyProvider from "@/components/StudyProvider";
 import TopBar from "@/components/TopBar";
 
 const onest = Onest({
@@ -42,14 +44,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             </linearGradient>
           </defs>
         </svg>
-        <div className="app-shell">
+        <StudyProvider><div className="app-shell">
           <a href="#conteudo" className="skip-link">Pular para o conteúdo</a>
           <ScrollEffects/>
           <TopBar />
           <MainNav />
           <DashboardSidebar/>
           <main id="conteudo" className="main-content"><StudentOverview/>{children}</main>
-        </div>
+        </div></StudyProvider>
       </body>
     </html>
   );
