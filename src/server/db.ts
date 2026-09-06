@@ -5,7 +5,10 @@ import { dirname, resolve } from "node:path";
 const globalDb = globalThis as unknown as { coelhoDb?: DatabaseSync };
 export function db() {
   if (globalDb.coelhoDb) return globalDb.coelhoDb;
-  const path = resolve(process.env.DATABASE_PATH || "data/coelho.sqlite");
+  const path = resolve(
+    /* turbopackIgnore: true */ process.env.DATABASE_PATH ||
+      "data/coelho.sqlite",
+  );
   mkdirSync(dirname(path), { recursive: true });
   const connection = new DatabaseSync(path);
   connection.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
@@ -24,7 +27,14 @@ export function db() {
   return connection;
 }
 export function transaction<T>(work: () => T): T {
-  const connection = db(); connection.exec("BEGIN IMMEDIATE");
-  try { const result = work(); connection.exec("COMMIT"); return result; }
-  catch (error) { connection.exec("ROLLBACK"); throw error; }
+  const connection = db();
+  connection.exec("BEGIN IMMEDIATE");
+  try {
+    const result = work();
+    connection.exec("COMMIT");
+    return result;
+  } catch (error) {
+    connection.exec("ROLLBACK");
+    throw error;
+  }
 }

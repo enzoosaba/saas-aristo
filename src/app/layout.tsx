@@ -33,25 +33,50 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
       className={`${onest.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <head><script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('coelho-theme')==='light'?'light':'dark';document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t}catch(e){}})();` }}/></head>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('coelho-theme')==='light'?'light':'dark';document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className="min-h-full bg-cream text-ink">
-        <svg width="0" height="0" aria-hidden="true" className="brand-gradient-defs">
+        <svg
+          width="0"
+          height="0"
+          aria-hidden="true"
+          className="brand-gradient-defs"
+        >
           <defs>
-            <linearGradient id="coelho-accent" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="24" y2="24">
+            <linearGradient
+              id="coelho-accent"
+              gradientUnits="userSpaceOnUse"
+              x1="0"
+              y1="0"
+              x2="24"
+              y2="24"
+            >
               <stop offset="0%" stopColor="#ff8b38" />
               <stop offset="45%" stopColor="#ff5d00" />
               <stop offset="100%" stopColor="#e85002" />
             </linearGradient>
           </defs>
         </svg>
-        <StudyProvider><div className="app-shell">
-          <a href="#conteudo" className="skip-link">Pular para o conteúdo</a>
-          <ScrollEffects/>
-          <TopBar />
-          <MainNav />
-          <DashboardSidebar/>
-          <main id="conteudo" className="main-content"><StudentOverview/>{children}</main>
-        </div></StudyProvider>
+        <StudyProvider>
+          <div className="app-shell">
+            <a href="#conteudo" className="skip-link">
+              Pular para o conteúdo
+            </a>
+            <ScrollEffects />
+            <TopBar />
+            <MainNav />
+            <DashboardSidebar />
+            <main id="conteudo" className="main-content">
+              <StudentOverview />
+              {children}
+            </main>
+          </div>
+        </StudyProvider>
       </body>
     </html>
   );

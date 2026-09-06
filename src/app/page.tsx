@@ -1,9 +1,115 @@
 "use client";
 import Link from "next/link";
-import {ArrowUpRight,Flame,ListChecks,NotebookPen,CalendarDays,User} from "lucide-react";
-import {MissionsPanel,QuestionsPanel,PerformancePanels} from "@/components/StudyPanels";
+import {
+  ArrowUpRight,
+  Flame,
+  ListChecks,
+  NotebookPen,
+  CalendarDays,
+  User,
+} from "lucide-react";
+import {
+  MissionsPanel,
+  QuestionsPanel,
+  PerformancePanels,
+} from "@/components/StudyPanels";
 import Card from "@/components/ui/Card";
-import {useStudy} from "@/components/StudyProvider";
-import {progress} from "@/lib/domain";
-const shortcuts=[{href:"/rotina",label:"Minha rotina",icon:ListChecks},{href:"/planos",label:"Meu planejamento",icon:NotebookPen},{href:"/calendario",label:"Meu calendário",icon:CalendarDays},{href:"/perfil",label:"Meu desempenho",icon:User}];
-export default function InicioPage(){const {data}=useStudy();const stats=progress(data.items,data.records,data.today);const tasks=data.items.filter(i=>i.kind==="task"&&i.date===data.today).sort((a,b)=>a.time.localeCompare(b.time));return <div className="workspace-page flex flex-col gap-5"><div className="page-heading"><div><p className="eyebrow">UM DIA DE CADA VEZ</p><h1>Olá, {data.user.name.split(" ")[0]}</h1><p>Seu progresso começa com o que você faz hoje.</p></div><span className="streak-pill"><Flame size={18}/>{stats.streak} dias de constância</span></div><div className="real-metrics"><Card><p>Atividades de hoje</p><strong>{stats.todayDone} / {stats.todayTotal}</strong></Card><Card><p>Experiência de hoje</p><strong>{stats.todayXp} XP</strong></Card><Card><p>Seu nível</p><strong>{stats.level}</strong></Card><Card><p>Realizações no histórico</p><strong>{stats.totalDone}</strong></Card></div><div className="shortcuts">{shortcuts.map(({href,label,icon:Icon})=><Link href={href} className="shortcut" key={href}><span className="shortcut-icon"><Icon size={22}/></span><ArrowUpRight className="shortcut-arrow" size={18}/><h3>{label}</h3></Link>)}</div><div className="functional-grid"><MissionsPanel/><QuestionsPanel/><div className="full-width"><PerformancePanels/></div><Card className="agenda-card"><div className="section-heading"><h2>Agenda de hoje</h2><Link href="/calendario">Ver agenda</Link></div>{tasks.length?tasks.map(task=><div className="agenda-item" key={task.id}><div><span className="agenda-time">{task.time||"Sem horário"}</span><p>{task.title}</p></div></div>):<div className="study-empty"><strong>Dia com espaço livre</strong><p>Adicione suas tarefas pelo botão + no topo.</p></div>}</Card><div className="daily-quote"><p className="eyebrow">SEU PRÓXIMO PASSO</p><blockquote>Um plano possível. Uma ação por vez.</blockquote><Link className="panel-link" href="/planos">Planejar meu dia<ArrowUpRight size={16}/></Link></div></div></div>;}
+import { useStudy } from "@/components/StudyProvider";
+import { progress } from "@/lib/domain";
+const shortcuts = [
+  { href: "/rotina", label: "Minha rotina", icon: ListChecks },
+  { href: "/planos", label: "Meu planejamento", icon: NotebookPen },
+  { href: "/calendario", label: "Meu calendário", icon: CalendarDays },
+  { href: "/perfil", label: "Meu desempenho", icon: User },
+];
+export default function InicioPage() {
+  const { data } = useStudy();
+  const stats = progress(data.items, data.records, data.today);
+  const tasks = data.items
+    .filter((i) => i.kind === "task" && i.date === data.today)
+    .sort((a, b) => a.time.localeCompare(b.time));
+  return (
+    <div className="workspace-page flex flex-col gap-5">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">UM DIA DE CADA VEZ</p>
+          <h1>Olá, {data.user.name.split(" ")[0]}</h1>
+          <p>Seu progresso começa com o que você faz hoje.</p>
+        </div>
+        <span className="streak-pill">
+          <Flame size={18} />
+          {stats.streak} dias de constância
+        </span>
+      </div>
+      <div className="real-metrics">
+        <Card>
+          <p>Atividades de hoje</p>
+          <strong>
+            {stats.todayDone} / {stats.todayTotal}
+          </strong>
+        </Card>
+        <Card>
+          <p>Experiência de hoje</p>
+          <strong>{stats.todayXp} XP</strong>
+        </Card>
+        <Card>
+          <p>Seu nível</p>
+          <strong>{stats.level}</strong>
+        </Card>
+        <Card>
+          <p>Realizações no histórico</p>
+          <strong>{stats.totalDone}</strong>
+        </Card>
+      </div>
+      <div className="shortcuts">
+        {shortcuts.map(({ href, label, icon: Icon }) => (
+          <Link href={href} className="shortcut" key={href}>
+            <span className="shortcut-icon">
+              <Icon size={22} />
+            </span>
+            <ArrowUpRight className="shortcut-arrow" size={18} />
+            <h2>{label}</h2>
+          </Link>
+        ))}
+      </div>
+      <div className="functional-grid">
+        <MissionsPanel />
+        <QuestionsPanel />
+        <div className="full-width">
+          <PerformancePanels />
+        </div>
+        <Card className="agenda-card">
+          <div className="section-heading">
+            <h2>Agenda de hoje</h2>
+            <Link href="/calendario">Ver agenda</Link>
+          </div>
+          {tasks.length ? (
+            tasks.map((task) => (
+              <div className="agenda-item" key={task.id}>
+                <div>
+                  <span className="agenda-time">
+                    {task.time || "Sem horário"}
+                  </span>
+                  <p>{task.title}</p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="study-empty">
+              <strong>Dia com espaço livre</strong>
+              <p>Adicione suas tarefas pelo botão + no topo.</p>
+            </div>
+          )}
+        </Card>
+        <div className="daily-quote">
+          <p className="eyebrow">SEU PRÓXIMO PASSO</p>
+          <blockquote>Um plano possível. Uma ação por vez.</blockquote>
+          <Link className="panel-link" href="/planos">
+            Planejar meu dia
+            <ArrowUpRight size={16} />
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}

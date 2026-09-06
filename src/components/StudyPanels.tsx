@@ -1,11 +1,151 @@
 "use client";
-import {useState} from "react";
+import { useState } from "react";
 import Link from "next/link";
-import {Target,ArrowUpRight,ChartNoAxesCombined} from "lucide-react";
+import { Target, ArrowUpRight, ChartNoAxesCombined } from "lucide-react";
 import Card from "./ui/Card";
 import ProgressBar from "./ui/ProgressBar";
-import {useStudy} from "./StudyProvider";
-import {progress,dayOffset,isScheduled} from "@/lib/domain";
-export function MissionsPanel(){const {data}=useStudy();const [week,setWeek]=useState(false);const metrics=progress(data.items,data.records,data.today);const rows=data.items.filter(i=>isScheduled(i,data.today));const doneWeek=data.records.filter(r=>r.done&&r.date>=dayOffset(data.today,-6)&&r.date<=data.today).length;return <Card className="missions-panel"><div className="panel-title"><h2><Target size={20}/>Missões</h2><div className="period-switch"><button aria-pressed={!week} onClick={()=>setWeek(false)}>Hoje</button><button aria-pressed={week} onClick={()=>setWeek(true)}>Semana</button></div></div><p className="panel-description">{week?`${doneWeek} realizações nos últimos 7 dias.`:`${metrics.todayDone} de ${metrics.todayTotal} atividades concluídas hoje.`}</p>{!week&&rows.slice(0,4).map(item=>{const log=data.records.find(r=>r.itemId===item.id&&r.date===data.today);return <div className="mission-row" key={item.id}><div><div className="mission-line"><strong>{item.title}</strong><span>{item.measure==="count"?`${log?.value||0}/${item.target}`:log?.done?"Concluído":"Pendente"}</span></div><ProgressBar label={item.title} value={item.measure==="count"?log?.value||0:Number(log?.done||false)} max={item.measure==="count"?item.target:1}/></div></div>;})}{rows.length===0&&!week&&<div className="study-empty"><strong>Seu próximo passo</strong><p>Crie uma atividade pelo botão + para começar.</p></div>}<Link href="/rotina" className="panel-link">Gerenciar minha rotina<ArrowUpRight size={16}/></Link></Card>;}
-export function QuestionsPanel(){const {data}=useStudy();const metrics=progress(data.items,data.records,data.today);return <Card className="questions-panel"><div className="panel-title"><h2>Conquistas do dia</h2></div><div className="real-metrics"><div><strong>{metrics.todayXp}</strong><p>XP conquistado hoje</p></div><div><strong>{metrics.streak}</strong><p>dias de constância</p></div></div><p className="panel-description">Cada atividade concluída vale 20 XP. Desmarcar uma conclusão também ajusta seus pontos.</p><Link href="/perfil" className="panel-link">Ver meu histórico<ArrowUpRight size={16}/></Link></Card>;}
-export function PerformancePanels(){const {data}=useStudy();const days=Array.from({length:7},(_,i)=>dayOffset(data.today,i-6));const values=days.map(date=>data.records.filter(r=>r.date===date&&r.done).length);const max=Math.max(...values,1);return <Card><div className="panel-title"><h2><ChartNoAxesCombined size={20}/>Sua última semana</h2></div><div className="history-bars" role="img" aria-label={days.map((d,i)=>`${d}: ${values[i]} atividades concluídas`).join("; ")}>{days.map((date,i)=><div key={date} className="history-day"><span>{values[i]}</span><div style={{height:`${values[i]/max*120+2}px`}}/><span>{date.slice(8)}/{date.slice(5,7)}</span></div>)}</div><p className="panel-description">Atividades concluídas por dia, com base no seu histórico.</p></Card>;}
+import { useStudy } from "./StudyProvider";
+import { progress, dayOffset, isScheduled } from "@/lib/domain";
+export function MissionsPanel() {
+  const { data } = useStudy();
+  const [week, setWeek] = useState(false);
+  const metrics = progress(data.items, data.records, data.today);
+  const rows = data.items.filter((i) => isScheduled(i, data.today));
+  const doneWeek = data.records.filter(
+    (r) =>
+      r.done && r.date >= dayOffset(data.today, -6) && r.date <= data.today,
+  ).length;
+  return (
+    <Card className="missions-panel">
+      <div className="panel-title">
+        <h2>
+          <Target size={20} />
+          Missões
+        </h2>
+        <div className="period-switch">
+          <button aria-pressed={!week} onClick={() => setWeek(false)}>
+            Hoje
+          </button>
+          <button aria-pressed={week} onClick={() => setWeek(true)}>
+            Semana
+          </button>
+        </div>
+      </div>
+      <p className="panel-description">
+        {week
+          ? `${doneWeek} realizações nos últimos 7 dias.`
+          : `${metrics.todayDone} de ${metrics.todayTotal} atividades concluídas hoje.`}
+      </p>
+      {!week &&
+        rows.slice(0, 4).map((item) => {
+          const log = data.records.find(
+            (r) => r.itemId === item.id && r.date === data.today,
+          );
+          return (
+            <div className="mission-row" key={item.id}>
+              <div>
+                <div className="mission-line">
+                  <strong>{item.title}</strong>
+                  <span>
+                    {item.measure === "count"
+                      ? `${log?.value || 0}/${item.target}`
+                      : log?.done
+                        ? "Concluído"
+                        : "Pendente"}
+                  </span>
+                </div>
+                <ProgressBar
+                  label={item.title}
+                  value={
+                    item.measure === "count"
+                      ? log?.value || 0
+                      : Number(log?.done || false)
+                  }
+                  max={item.measure === "count" ? item.target : 1}
+                />
+              </div>
+            </div>
+          );
+        })}
+      {rows.length === 0 && !week && (
+        <div className="study-empty">
+          <strong>Seu próximo passo</strong>
+          <p>Crie uma atividade pelo botão + para começar.</p>
+        </div>
+      )}
+      <Link href="/rotina" className="panel-link">
+        Gerenciar minha rotina
+        <ArrowUpRight size={16} />
+      </Link>
+    </Card>
+  );
+}
+export function QuestionsPanel() {
+  const { data } = useStudy();
+  const metrics = progress(data.items, data.records, data.today);
+  return (
+    <Card className="questions-panel">
+      <div className="panel-title">
+        <h2>Conquistas do dia</h2>
+      </div>
+      <div className="real-metrics">
+        <div>
+          <strong>{metrics.todayXp}</strong>
+          <p>XP conquistado hoje</p>
+        </div>
+        <div>
+          <strong>{metrics.streak}</strong>
+          <p>dias de constância</p>
+        </div>
+      </div>
+      <p className="panel-description">
+        Cada atividade concluída vale 20 XP. Desmarcar uma conclusão também
+        ajusta seus pontos.
+      </p>
+      <Link href="/perfil" className="panel-link">
+        Ver meu histórico
+        <ArrowUpRight size={16} />
+      </Link>
+    </Card>
+  );
+}
+export function PerformancePanels() {
+  const { data } = useStudy();
+  const days = Array.from({ length: 7 }, (_, i) =>
+    dayOffset(data.today, i - 6),
+  );
+  const values = days.map(
+    (date) => data.records.filter((r) => r.date === date && r.done).length,
+  );
+  const max = Math.max(...values, 1);
+  return (
+    <Card>
+      <div className="panel-title">
+        <h2>
+          <ChartNoAxesCombined size={20} />
+          Sua última semana
+        </h2>
+      </div>
+      <div
+        className="history-bars"
+        role="img"
+        aria-label={days
+          .map((d, i) => `${d}: ${values[i]} atividades concluídas`)
+          .join("; ")}
+      >
+        {days.map((date, i) => (
+          <div key={date} className="history-day">
+            <span>{values[i]}</span>
+            <div style={{ height: `${(values[i] / max) * 120 + 2}px` }} />
+            <span>
+              {date.slice(8)}/{date.slice(5, 7)}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="panel-description">
+        Atividades concluídas por dia, com base no seu histórico.
+      </p>
+    </Card>
+  );
+}
