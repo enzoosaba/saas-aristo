@@ -11,10 +11,13 @@ const destinations = [
   { href: "/rotina", title: "Rotina", icon: ListChecks, description: "Hábitos e tarefas diárias" },
   { href: "/planos", title: "Planos", icon: NotebookPen, description: "Planejamento de estudos" },
   { href: "/calendario", title: "Calendário", icon: CalendarDays, description: "Agenda e provas" },
-  { href: "/perfil", title: "Perfil", icon: User, description: "Desempenho e ranking" },
+  { href: "/perfil", title: "Perfil", icon: User, description: "Histórico e minha conta" },
 ];
 
+import {useStudy} from "../StudyProvider";
+
 export default function DashboardSidebar() {
+  const {data}=useStudy();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
@@ -55,7 +58,7 @@ export default function DashboardSidebar() {
         <div className="desktop-nav-group"><p>ORGANIZAR & ESTUDAR</p>{destinations.slice(1,4).map(navLink)}</div>
         <div className="desktop-nav-group"><p>MINHA EVOLUÇÃO</p>{navLink(destinations[4])}</div>
       </nav>
-      <div className="desktop-sidebar-footer"><div className="desktop-workspace-note"><GraduationCap size={20}/><span>Seu plano, no seu ritmo.<small>Organize. Estude. Evolua.</small></span></div><Link href="/perfil" className="desktop-user"><span className="avatar">ES</span><span><strong>Enzo Saba</strong><small>Aluno · Prata</small></span><ArrowUpRight size={16}/></Link></div>
+      <div className="desktop-sidebar-footer"><div className="desktop-workspace-note"><GraduationCap size={20}/><span>Seu plano, no seu ritmo.<small>Organize. Estude. Evolua.</small></span></div><Link href="/perfil" className="desktop-user"><span className="avatar">{data.user.name.split(" ").map(n=>n[0]).slice(0,2).join("")}</span><span><strong>{data.user.name}</strong><small>Minha conta</small></span><ArrowUpRight size={16}/></Link></div>
     </aside>
     <div className="desktop-breadcrumb"><button type="button" aria-label={collapsed ? "Expandir menu lateral" : "Recolher menu lateral"} aria-expanded={!collapsed} onClick={()=>setCollapsed(!collapsed)}>{collapsed ? <PanelLeftOpen size={20}/> : <PanelLeftClose size={20}/>}</button><span>Mentoria Coelho</span><ChevronRight size={13}/><strong>{current?.title || "Meu espaço"}</strong></div>
     <dialog ref={dialog} className="desktop-search-dialog" aria-labelledby="desktop-search-title" onClose={()=>{if(window.matchMedia("(min-width: 1100px)").matches)searchButton.current?.focus();}} onClick={event=>{if(event.target===dialog.current){const r=dialog.current.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.current.close();}}}>
