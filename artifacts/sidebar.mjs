@@ -1,0 +1,14 @@
+import { chromium } from 'playwright';
+const browser=await chromium.launch({headless:true,channel:'msedge'});
+const page=await browser.newPage({viewport:{width:390,height:844}});
+await page.goto('http://localhost:3000');await page.waitForLoadState('networkidle');
+await page.setViewportSize({width:1440,height:1000});
+await page.getByRole('button',{name:'Buscar páginas',exact:true}).click();
+await page.getByRole('textbox',{name:'Buscar páginas da plataforma'}).fill('agenda');
+await page.locator('.desktop-search-results').getByRole('link',{name:'Calendário'}).click();await page.waitForURL('**/calendario');
+await page.getByRole('button',{name:'Recolher menu lateral'}).click();if(Math.round((await page.locator('.desktop-sidebar').boundingBox()).width)!==76)throw Error('Collapse width');
+await page.getByRole('button',{name:'Expandir menu lateral'}).click();
+await page.keyboard.press('Control+k');await page.getByRole('textbox',{name:'Buscar páginas da plataforma'}).fill('xxxx');await page.getByText('Nenhuma página encontrada.',{exact:false}).waitFor();await page.keyboard.press('Escape');
+if(await page.locator('.desktop-nav-group').count()!==3 || await page.locator('.desktop-nav-item:visible').count()!==5)throw Error('Sidebar groups or destinations missing');
+await page.goto('http://localhost:3000');await page.waitForLoadState('networkidle');await page.screenshot({path:'artifacts/desktop-sidebar.png',fullPage:true});
+console.log({collapse:'passed',search:'passed',shortcut:'passed',groups:'passed'});await browser.close();

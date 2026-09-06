@@ -1,0 +1,160 @@
+/* Coelho themes: Onest, vivid orange and neutral surfaces from the references. */
+:root,
+html[data-theme="dark"] {
+  color-scheme:dark;
+  --background:#0d0b0a;
+  --foreground:#fffafa;
+  --surface-base:#0d0b0a;
+  --surface-card:#1a1817;
+  --surface-raised:#24211f;
+  --surface-input:#12100f;
+  --surface-header:#12100f;
+  --surface-warm:#2b1c13;
+  --text-primary:#fffafa;
+  --text-secondary:#bdb6b1;
+  --text-muted:#a7a09a;
+  --border-default:#36302c;
+  --border-warm:#66412a;
+  --brand-orange:#ff5d00;
+  --accent-text:#ffae76;
+  --active-surface:#382214;
+  --brand-gradient:linear-gradient(115deg,#ff8b38 0%,#ff5d00 48%,#e85002 100%);
+  --card-shadow:0 6px 20px #0000000a;
+  --dock-background:#24211ff5;
+  --radius-card:22px;
+}
+html[data-theme="light"] {
+  color-scheme:light;
+  --background:#f9f9f9;
+  --foreground:#0d0101;
+  --surface-base:#f9f9f9;
+  --surface-card:#ffffff;
+  --surface-raised:#f0eeec;
+  --surface-input:#fff;
+  --surface-header:#fffafa;
+  --surface-warm:#fff0e6;
+  --text-primary:#0d0101;
+  --text-secondary:#646464;
+  --text-muted:#6c625c;
+  --border-default:#e5dfdb;
+  --border-warm:#ebbea0;
+  --accent-text:#a43b00;
+  --active-surface:#ffeadb;
+  --card-shadow:0 6px 24px #33140005;
+  --dock-background:#fffffff5;
+}
+html[data-theme] body { background:var(--background); color:var(--foreground); font-family:var(--font-onest),Arial,Helvetica,sans-serif; }
+html[data-theme] :is(input,select,textarea,button) { font-family:inherit; }
+html[data-theme] :is(h1,h2,h3) { letter-spacing:-.035em; }
+html[data-theme] ::selection { background:#ff5d0040; color:var(--foreground); }
+html[data-theme] :is(.site-header,.desktop-sidebar,.header-navigation) { background:var(--surface-header); border-color:var(--border-default); }
+html[data-theme] :is(.study-card,.shortcut,.student-overview-card,.metric-card,.insight-card,.profile-summary .study-card,.profile-identity,.agenda-card,.personal-item) {
+  background:var(--surface-card); border-color:var(--border-default); border-radius:var(--radius-card); box-shadow:var(--card-shadow); color:var(--foreground);
+}
+html[data-theme] :is(.lesson-banner,.hero,.daily-quote,.exam-highlight) { background:var(--surface-warm); border-color:var(--border-warm); color:var(--foreground); border-radius:var(--radius-card); }
+html[data-theme] .daily-quote { border-left:3px solid var(--brand-orange); }
+html[data-theme] :is(.shortcut:hover,.desktop-nav-item:hover,.desktop-workspace summary:hover,.desktop-workspace-menu a:hover,.desktop-search-results a:hover) { background:var(--surface-raised); color:var(--foreground); }
+html[data-theme] :is(.header-brand,.header-brand strong,.mobile-brand strong,.brand,.desktop-breadcrumb>strong,.desktop-workspace strong,.desktop-user strong,.panel-title h2,.section-heading h2,.shortcut h3,.stat-value,.goal-label strong,.student-overview-identity strong,.personal-item-title strong) { color:var(--foreground); }
+html[data-theme] :is(.page-heading>div>p:last-child,.page-description,.panel-description,.missions-panel .panel-description,.stat-label,.stat-label svg,.stat-caption,.stat-value>span,.student-tier,.student-overview-card>span,.student-overview-card small,.student-overview-identity .eyebrow,.header-brand small,.header-account small,.desktop-workspace small,.desktop-workspace-menu p,.desktop-breadcrumb>span,.desktop-user small,.desktop-workspace-note,.desktop-workspace-note small,.desktop-nav-group>p,.desktop-search-button,.desktop-search-button kbd,.desktop-nav-item,.desktop-search-results small,.desktop-search-results>p,.desktop-search-hint,.shortcut p,.shortcut-arrow,.goal-label,.goal-label strong span,.agenda-time,.lesson-banner p,.lesson-progress-label,.hero-copy>p,.ring-caption,.questions-ring span,.mission-line>span,.mission-xp,.insight-card>span,.insight-card>p,.study-empty p,.study-empty strong,.personal-item>p,.optional,.field-hint,.quick-add-options>p,.quick-add-options small,.quick-add-footer>span,.quick-add-success>p:last-of-type,.page-footer,.page-footer span:last-child,.demo-caption,.ranking-heading p,.podium-place>span:not(.podium-avatar),.topic-row>div>span,.chart-legend,.profile-cover span) { color:var(--text-secondary); }
+html[data-theme] :is(.lesson-track,.hero-label,.personal-item-title span,.topic-errors,.insight-card>strong,.daily-quote .eyebrow,.panel-link,.section-heading>a,.streak-pill,.back-choice,.mission-xp strong,.quick-add-error,.form-feedback[role="alert"]) { color:var(--accent-text); background-image:none; -webkit-text-fill-color:currentColor; }
+html[data-theme] .daily-quote blockquote { color:var(--foreground); }
+html[data-theme] .daily-quote>span { color:var(--text-secondary); }
+html[data-theme] .agenda-item p { color:var(--foreground); }
+html[data-theme] .eyebrow { color:var(--text-muted); font-size:11px; letter-spacing:.12em; }
+html[data-theme] :is(.quick-add-dialog,.desktop-search-dialog,.desktop-workspace-menu,.route-error) { background:var(--surface-card); color:var(--foreground); border-color:var(--border-default); }
+html[data-theme] :is(.quick-add-form input,.quick-add-form select,.quick-add-form textarea,.workspace-page textarea) { background:var(--surface-input); color:var(--foreground); border-color:var(--border-default); }
+html[data-theme] :is(input,textarea)::placeholder { color:var(--text-muted); }
+html[data-theme] :is(.quick-add-options>button,.profile-cover,.podium-step) { background:var(--surface-warm); color:var(--foreground); border-color:var(--border-warm); }
+html[data-theme] :is(.dialog-close,.period-switch,.period-filter,.workspace-page>.rounded-full,.mobile-study-links a,.personal-counter button,.avatar,.stat-value .level-badge,.topic-rank,.mission-icon,.shortcut-icon,.lesson-icon) { background:var(--surface-raised); color:var(--foreground); border-color:var(--border-default); }
+html[data-theme] .period-switch button { color:var(--text-secondary); }
+html[data-theme] :is(.period-switch button[aria-pressed="true"],.primary-button,.lesson-cta,.workspace-page button[type="submit"],.quick-add-trigger) { background:var(--brand-gradient); color:#0d0101; -webkit-text-fill-color:#0d0101; border-color:transparent; box-shadow:none; }
+html[data-theme] :is(.primary-button:hover,.lesson-cta:hover,.quick-add-trigger:hover) { background:var(--brand-gradient); filter:brightness(1.06); }
+html[data-theme] :is(.desktop-nav-item[aria-current="page"],.workspace-page>.rounded-full button.bg-ink,.personal-done[aria-pressed="true"],.streak-pill) { background:var(--active-surface); color:var(--accent-text); border-color:var(--border-warm); }
+html[data-theme] .desktop-nav-item[aria-current="page"] { font-weight:650; }
+html[data-theme] .personal-done { color:var(--foreground); border-color:var(--border-warm); }
+html[data-theme] :is(.sidebar-profile,.page-footer,.student-overview,.desktop-sidebar-footer,.mission-row,.topic-row,.questions-panel .panel-link,.desktop-search-field,.desktop-search-hint) { border-color:var(--border-default); }
+html[data-theme] [role="progressbar"] { background:var(--surface-raised); }
+html[data-theme] [role="progressbar"]>div { background:var(--brand-gradient); transition:width .4s ease; }
+html[data-theme] :is(.timeline-dot,.agenda-item:not(:last-child)::before) { border-color:var(--border-default); background:var(--surface-raised); }
+html[data-theme] .timeline-dot.highlight { background:var(--brand-gradient); border-color:var(--brand-orange); box-shadow:0 0 0 4px #ff5d0014; }
+html[data-theme] :is(.desktop-search-button kbd,.desktop-search-button,.desktop-workspace-menu,.mobile-study-links a,.ranking-podium,.header-account .avatar) { border-color:var(--border-default); }
+html[data-theme] .ranking-podium { background:var(--surface-card); }
+html[data-theme] .podium-avatar { background:var(--surface-warm); border-color:var(--border-warm); color:var(--accent-text); }
+html[data-theme] .podium-step>strong { color:var(--accent-text); }
+html[data-theme] .skip-link { background:var(--surface-card); color:var(--foreground); }
+html[data-theme] .profile-identity>div:nth-child(2) { border-color:var(--surface-card); background:var(--active-surface); color:var(--accent-text); }
+html[data-theme] .workspace-page :is(.text-ink\/60,.text-ink\/50,.text-ink\/40) { color:var(--text-secondary); }
+html[data-theme] .workspace-page :is(.text-accent,.text-accent-dark) { color:var(--accent-text); background-image:none; }
+html[data-theme] .workspace-page :is(.bg-black\/5,.bg-black\/8,.bg-black\/10) { background:var(--surface-raised); }
+html[data-theme] .workspace-page .border-accent\/20 { background:var(--surface-warm); border-color:var(--border-warm); }
+html[data-theme] .workspace-page .divide-black\/5>:not(:last-child) { border-color:var(--border-default); }
+html[data-theme] .workspace-page .bg-accent\/15 { background:var(--active-surface); color:var(--accent-text); }
+html[data-theme] .exam-name { color:var(--foreground); }
+html[data-theme] .skeleton-line { background:var(--surface-raised); }
+html[data-theme] .radar-chart text { fill:var(--text-secondary); }
+html[data-theme] .radar-chart text+text { fill:var(--accent-text); }
+html[data-theme] .chart-legend .legend-dashed { border-color:var(--text-muted); }
+html[data-theme] .chart-legend .legend-line { border-color:var(--brand-orange); }
+html[data-theme] .chart-legend .legend-bar { background:#ff5d0040; }
+html[data-theme] .topic-rank { color:var(--accent-text); background:var(--active-surface); }
+html[data-theme="light"] .app-shell .lucide { stroke:#b14000; }
+html[data-theme] :is(.primary-button,.lesson-cta,.quick-add-trigger,.period-switch button[aria-pressed="true"],.workspace-page button[type="submit"]) .lucide { stroke:#0d0101; }
+html[data-theme] .workspace-page button[aria-pressed="false"].text-transparent .lucide { stroke:transparent; }
+.theme-toggle { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; border:1px solid var(--border-default); background:var(--surface-raised); border-radius:14px; color:var(--foreground); }
+.theme-toggle .theme-moon { display:none; }
+html[data-theme="light"] .theme-toggle .theme-sun { display:none; }
+html[data-theme="light"] .theme-toggle .theme-moon { display:block; }
+html[data-theme] :is(a,button,input,textarea,select):focus-visible { outline-color:var(--accent-text); }
+@media(hover:hover) and (prefers-reduced-motion:no-preference) {
+ .shortcut,.lesson-banner,.desktop-nav-item { transition:background .18s,border-color .18s,transform .18s; }
+ .shortcut:hover { transform:translateY(-3px); }
+ .desktop-nav-item:hover { transform:translateX(2px); }
+ .theme-toggle:hover { transform:rotate(-8deg); }
+}
+@media(min-width:1100px) {
+ .desktop-sidebar { padding:24px 16px 16px; }
+ .desktop-nav-group { margin-bottom:24px; }
+ .desktop-nav-group>p { padding:0 12px; margin-bottom:12px; font-size:10px; letter-spacing:.12em; }
+ .desktop-nav-item { min-height:60px; padding:12px; gap:12px; border-radius:14px; margin:4px 0; }
+ .desktop-nav-item small { display:block; font-size:11px; color:var(--text-secondary); font-weight:400; margin-top:4px; }
+ .desktop-sidebar .lucide { width:20px; height:20px; }
+ .desktop-sidebar-shell[data-collapsed="true"] .desktop-sidebar { padding-inline:12px; }
+ .desktop-sidebar-shell[data-collapsed="true"] .desktop-nav-item { min-height:48px; }
+ .desktop-search-button { border-radius:12px; min-height:46px; }
+ .desktop-user { border-radius:14px; background:var(--surface-raised); }
+ .student-overview { gap:16px; padding-bottom:24px; margin-bottom:28px; }
+ .student-overview-card { border-radius:20px; }
+ .student-overview-identity strong { font-size:25px; letter-spacing:-1px; }
+ .student-overview-card>strong { font-size:34px; letter-spacing:-1.5px; }
+ .dashboard { gap:22px; align-items:stretch; }
+ .dashboard>.hero { display:none; }
+ .dashboard>.page-heading { grid-row:1; }.page-heading h1 { font-size:36px; letter-spacing:-1.5px; }
+ .dashboard>.lesson-banner { grid-column:1/3; grid-row:2; display:grid; grid-template-columns:minmax(0,1fr) 90px; gap:16px; min-height:268px; padding:28px; border-radius:26px; margin:0; }
+ .lesson-banner>.lesson-icon { grid-column:2; grid-row:1; width:90px; height:104px; border-radius:32px; align-self:center; }
+ .lesson-banner>div { grid-column:1; grid-row:1; }.lesson-banner strong { font-size:28px; line-height:1.2; letter-spacing:-1px; }.lesson-banner p { font-size:14px; line-height:1.6; }.lesson-banner>.lesson-cta { grid-column:1/-1; width:max-content; border-radius:24px; font-size:14px; padding:12px 20px; }
+ .dashboard>.stats-grid { grid-column:3; grid-row:2; gap:12px; }.stats-grid>.study-card { border-radius:20px; }
+ .dashboard .missions-panel { grid-column:1; grid-row:3; }.dashboard .questions-panel { grid-column:2; grid-row:3; }.dashboard-columns>aside>.agenda-card { grid-column:3; grid-row:3; }
+ .dashboard-columns>section { grid-column:1/3; grid-row:4; }.dashboard-columns>aside>.daily-quote { grid-column:3; grid-row:4; }
+ .missions-panel,.questions-panel,.agenda-card { min-height:380px; border-radius:24px; }
+ .shortcut { border-radius:20px; }.shortcut-icon { width:40px; height:40px; display:grid; place-items:center; border-radius:14px; }
+ .daily-quote { border-radius:22px; }
+ .performance-layout { gap:20px; }.metric-card,.insight-card { border-radius:22px; }
+ .workspace-page>.rounded-full { border-radius:16px; }
+}
+@media(max-width:767px) {
+ html[data-theme] .header-navigation { background:var(--dock-background); border-color:var(--border-default); box-shadow:0 8px 32px #00000015; }
+ html[data-theme] .header-tab { color:var(--text-secondary); }
+ html[data-theme] .header-tab.is-current { color:#0d0101; background:var(--brand-gradient); }
+ html[data-theme] .header-tab.is-current .lucide { stroke:#0d0101; }
+ html[data-theme] .header-tab:hover { background:var(--surface-raised); }
+ html[data-theme] .header-tab.is-current:hover { background:var(--brand-gradient); }
+ .header-actions { gap:8px; }
+ .header-inner { padding:0 20px; }
+ .header-brand>span { font-size:23px; }
+ .page-heading h1 { font-size:29px; letter-spacing:-1px; }
+ .lesson-banner strong { font-size:23px; letter-spacing:-.75px; }
+}
+html[data-theme] .section-heading>span { color:var(--text-secondary); }
+@media(prefers-reduced-motion:reduce) {
+ *,*::before,*::after { scroll-behavior:auto!important; animation:none!important; transition:none!important; }
+}

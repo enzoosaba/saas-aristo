@@ -1,69 +1,27 @@
+import Link from "next/link";
 import Image from "next/image";
-
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+import { ArrowUpRight, ArrowRight, Flame, ListChecks, NotebookPen, CalendarDays, User, Sparkles, Target, Clock3, Quote, Layers, Play } from "lucide-react";
+import { MissionsPanel, QuestionsPanel } from "@/components/StudyPanels";
+import Card from "@/components/ui/Card";
+import ProgressBar from "@/components/ui/ProgressBar";
+import { aluno, aulaEmAndamento, fraseDoDia, habitos, xpHojeAtual, xpHojeMeta, horariosDiarios, metasSemanais } from "@/lib/mock-data";
+const ATALHOS = [
+ {href:"/rotina",label:"Minha rotina",description:"Pequenos hábitos, grandes resultados",icon:ListChecks,color:"amber"},
+ {href:"/planos",label:"Meu planejamento",description:"Dê direção ao seu próximo dia",icon:NotebookPen,color:"blue"},
+ {href:"/calendario",label:"Meu calendário",description:"Cada compromisso no seu tempo",icon:CalendarDays,color:"green"},
+ {href:"/perfil",label:"Meu desempenho",description:"Veja o quanto você já evoluiu",icon:User,color:"purple"},
+];
+export default function InicioPage() {
+ const feitos = habitos.filter(h => h.tipo === "checklist" ? h.feito : h.valor >= h.meta).length;
+ return <div className="dashboard">
+  <div className="page-heading"><div><p className="eyebrow">VAMOS CONSTRUIR SEU FUTURO</p><h1>Olá, {aluno.nome.split(" ")[0]}</h1><p>Confira suas metas e organize a próxima sessão de estudo.</p></div><span className="streak-pill"><Flame size={18}/>{aluno.streakUsoPlataforma} dias de constância</span></div>
+  <Link href="/rotina" className="lesson-banner"><span className="lesson-icon"><Layers size={26}/></span><div><span className="lesson-track">{aulaEmAndamento.trilha}</span><strong>{aulaEmAndamento.titulo}</strong><p>{aulaEmAndamento.subtitulo}</p><span className="lesson-progress-label">Aula {aulaEmAndamento.aulaAtual} de {aulaEmAndamento.totalAulas} · {aulaEmAndamento.progresso}% concluído</span><ProgressBar label="Progresso da aula" value={aulaEmAndamento.progresso} max={100}/></div><span className="lesson-cta"><Play size={16}/>Continuar estudando</span></Link>
+  <div className="mobile-study-links"><Link href="/rotina"><ListChecks size={16}/>Hábitos</Link><Link href="/planos"><NotebookPen size={16}/>Planejar</Link><Link href="/calendario"><CalendarDays size={16}/>Agenda</Link></div>
+  <section className="hero"><div className="hero-copy"><span className="hero-label"><span/> SEU PLANO DE ESTUDO</span><h2>Hoje é dia de<br/>manter o ritmo.</h2><p>Questões, revisão e hábitos: acompanhe o que você já fez e o que falta concluir.</p><Link href="/rotina" className="primary-button">Abrir minha rotina <ArrowRight size={17}/></Link></div><div className="journey-art" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><Image src="/brand/coelho.png" alt="" width={300} height={300} priority className="hero-rabbit"/></div></section>
+  <section className="stats-grid" aria-label="Resumo da jornada"><Card><span className="stat-label"><ListChecks size={17}/> Hábitos de hoje</span><div className="stat-value">{feitos}<span>/ {habitos.length}</span></div><ProgressBar label="Hábitos concluídos hoje" value={feitos} max={habitos.length}/><p className="stat-caption">Sua constância faz a diferença</p></Card><Card><span className="stat-label"><Sparkles size={17}/> Experiência de hoje</span><div className="stat-value">{xpHojeAtual}<span>/ {xpHojeMeta} XP</span></div><ProgressBar label="Experiência de hoje" value={xpHojeAtual} max={xpHojeMeta} colorClassName="bg-accent"/><p className="stat-caption">Cada missão é uma evolução</p></Card><Card><span className="stat-label"><Target size={17}/> Seu nível atual</span><div className="stat-value">{aluno.nivel}<span className="level-badge">{aluno.tier}</span></div><ProgressBar label="Experiência para o próximo nível" value={aluno.xpAtual} max={aluno.xpProximoNivel} colorClassName="bg-accent"/><p className="stat-caption">Faltam {aluno.xpProximoNivel-aluno.xpAtual} XP para o próximo nível</p></Card></section>
+  <section className="study-overview" aria-label="Missões e questões"><MissionsPanel/><QuestionsPanel/></section>
+  <div className="dashboard-columns"><section><div className="section-heading"><h2>Seu estudo, organizado</h2><span>Acesso rápido</span></div><div className="shortcuts">{ATALHOS.map(({href,label,description,icon:Icon,color})=><Link href={href} key={href} className="shortcut"><span className={`shortcut-icon ${color}`}><Icon size={22}/></span><ArrowUpRight className="shortcut-arrow" size={18}/><h3>{label}</h3><p>{description}</p></Link>)}</div><div className="section-heading"><h2>Metas da semana</h2><Link href="/rotina">Ver rotina <ArrowUpRight size={14}/></Link></div><Card><div className="weekly-goals">{metasSemanais.map(m=><div key={m.id}><div className="goal-label"><span>{m.nome}</span><strong>{m.atual}<span> / {m.meta}</span></strong></div><ProgressBar label={m.nome} value={m.atual} max={m.meta}/></div>)}</div></Card></section>
+  <aside><Card className="agenda-card"><div className="section-heading"><h2>Agenda de hoje</h2><Link href="/calendario">Ver agenda <ArrowUpRight size={14}/></Link></div><div className="agenda">{horariosDiarios.map((h,i)=><div className="agenda-item" key={h.id}><span className={`timeline-dot ${i===1 ? "highlight" : ""}`}/><div><span className="agenda-time"><Clock3 size={12}/>{h.horario}</span><p>{h.atividade}</p></div></div>)}</div></Card><div className="daily-quote"><Quote size={22}/><p className="eyebrow">UMA PAUSA PARA INSPIRAR</p><blockquote>“{fraseDoDia}”</blockquote><span>Leve essa ideia com você hoje.</span></div></aside></div>
+  <p className="demo-caption">Prévia da plataforma · dados demonstrativos</p><footer className="page-footer"><span>Seu espaço de estudos.</span><span>MENTORIA COELHO</span></footer>
+ </div>;
 }
