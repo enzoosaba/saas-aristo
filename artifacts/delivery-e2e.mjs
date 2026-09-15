@@ -42,6 +42,99 @@ try {
   const [mentor, student, other] = accounts;
   const post = (account, path, data) =>
     account.ctx.request.post(base + path, { headers: { Origin: base }, data });
+
+  // Fase 0C: registration must atomically enroll the account into Tenant 01
+  // (aristo.profiles + aristo.tenant_members). Postgres-only — these tables
+  // do not exist under the SQLite fallback used by pnpm test:e2e.
+  if (pg) {
+    for (const account of [mentor, student, other]) {
+      const [profile] = await admin(
+        "SELECT full_name, avatar_url FROM profiles WHERE user_id=?",
+        [account.user.id],
+      );
+      assert.ok(profile, `profile ausente para ${account.user.id}`);
+      assert.equal(profile.full_name, account.user.name);
+      assert.equal(profile.avatar_url, null);
+      const [membership] = await admin(
+        `SELECT tm.role FROM tenant_members tm
+         JOIN tenants t ON t.id = tm.tenant_id
+         WHERE tm.user_id=? AND t.slug='mentoria-coelho'`,
+        [account.user.id],
+      );
+      assert.ok(membership, `tenant_members ausente para ${account.user.id}`);
+      assert.equal(membership.role, "STUDENT");
+    }
+
+    // Registering the same e-mail twice must not create a second profile or
+    // tenant_members row — the users insert is a no-op (0 changes), so the
+    // transaction never reaches createProfile/syncTenantMembership again.
+    const duplicate = await post(student, "/api/auth", {
+      action: "register",
+      name: student.user.name,
+      email: student.email,
+      password,
+    });
+    assert.equal(duplicate.status(), 409);
+    assert.equal(
+      Number(
+        (
+          await admin(
+            "SELECT count(*) AS total FROM profiles WHERE user_id=?",
+            [student.user.id],
+          )
+        )[0].total,
+      ),
+      1,
+    );
+    assert.equal(
+      Number(
+        (
+          await admin(
+            "SELECT count(*) AS total FROM tenant_members WHERE user_id=?",
+            [student.user.id],
+          )
+        )[0].total,
+      ),
+      1,
+    );
+
+    // Editing name/avatar keeps aristo.profiles in sync with users.
+    assert.equal(
+      (
+        await post(student, "/api/study", {
+          action: "profile",
+          name: "Aluno Renomeado",
+        })
+      ).status(),
+      200,
+    );
+    assert.equal(
+      (
+        await admin("SELECT full_name FROM profiles WHERE user_id=?", [
+          student.user.id,
+        ])
+      )[0].full_name,
+      "Aluno Renomeado",
+    );
+    assert.equal(
+      (
+        await post(student, "/api/study", {
+          action: "update-avatar",
+          avatar: "data:image/png;base64,AAAA",
+        })
+      ).status(),
+      200,
+    );
+    assert.equal(
+      (
+        await admin("SELECT avatar_url FROM profiles WHERE user_id=?", [
+          student.user.id,
+        ])
+      )[0].avatar_url,
+      "data:image/png;base64,AAAA",
+    );
+  }
+
   await admin("UPDATE users SET role='mentor' WHERE id=?", [mentor.user.id]);
   assert.equal(
     (await student.ctx.request.get(base + "/api/mentor")).status(),
@@ -180,7 +273,7 @@ try {
     404,
   );
   console.log(
-    "Delivery: mentor permissions, valid dates, concurrent writes, recovery UI, one-time tokens, revocation and login passed.",
+    "Delivery: mentor permissions, valid dates, concurrent writes, recovery UI, one-time tokens, revocation, login and Tenant 01 identity sync passed.",
   );
 } finally {
   await browser.close();

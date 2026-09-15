@@ -2,6 +2,8 @@ import { db, transaction } from "./db";
 
 import { HttpError } from "./http";
 
+import { updateProfileAvatar, updateProfileName } from "./identity";
+
 import { mutation } from "./validation";
 
 import {
@@ -388,18 +390,26 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
         .run(user.id, data.date, plan);
     }
 
-    if (data.action === "profile")
+    if (data.action === "profile") {
       await connection
 
         .prepare("UPDATE users SET name=? WHERE id=?")
 
         .run(data.name, user.id);
 
-    if (data.action === "update-avatar")
+      // Fase 0C: keep aristo.profiles in sync while users.role stays the
+      // source of authorization.
+      await updateProfileName(user.id, data.name);
+    }
+
+    if (data.action === "update-avatar") {
       await connection
 
         .prepare("UPDATE users SET avatar=? WHERE id=?")
 
         .run(data.avatar, user.id);
+
+      await updateProfileAvatar(user.id, data.avatar);
+    }
   });
 }

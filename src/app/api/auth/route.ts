@@ -10,6 +10,7 @@ import {
 } from "@/server/auth";
 import { db, transaction } from "@/server/db";
 import { body, failure, HttpError, json, limit } from "@/server/http";
+import { createProfile, syncTenantMembership } from "@/server/identity";
 export const runtime = "nodejs";
 const credentials = z
   .object({
@@ -75,18 +76,25 @@ export async function POST(request: Request) {
     const connection = db();
     if (data.action === "register") {
       if (!data.name) throw new HttpError(400, "Informe seu nome.");
+      const name = data.name;
       const password = await passwordHash(data.password);
       const id = randomUUID();
-      const result = await connection
-        .prepare(
-          "INSERT OR IGNORE INTO users(id,name,email,password,created_at) VALUES(?,?,?,?,?)",
-        )
-        .run(id, data.name, data.email, password, Date.now());
-      if (!result.changes)
-        throw new HttpError(
-          409,
-          "Não foi possível criar a conta com esses dados. Tente entrar.",
-        );
+      // Fase 0C: the account, its SaaS profile and its Tenant 01 membership
+      // are created atomically — any failure rolls back the whole signup.
+      await transaction(async () => {
+        const result = await connection
+          .prepare(
+            "INSERT OR IGNORE INTO users(id,name,email,password,created_at) VALUES(?,?,?,?,?)",
+          )
+          .run(id, name, data.email, password, Date.now());
+        if (!result.changes)
+          throw new HttpError(
+            409,
+            "Não foi possível criar a conta com esses dados. Tente entrar.",
+          );
+        await createProfile(id, name, null);
+        await syncTenantMembership(id, "student");
+      });
       await createSession(id);
       return json({ ok: true }, 201);
     }

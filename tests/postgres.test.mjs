@@ -27,6 +27,7 @@ test("all application SQL compiles against the PostgreSQL migration", async () =
       "src/server/http.ts",
       "src/server/study.ts",
       "src/server/mentor.ts",
+      "src/server/identity.ts",
       "src/app/api/auth/route.ts",
       "src/app/api/health/route.ts",
       "src/app/api/auth/recovery/route.ts",
@@ -77,6 +78,39 @@ test("all application SQL compiles against the PostgreSQL migration", async () =
         "INSERT INTO aristo.records(user_id,item_id,date,target) VALUES('b','i','2026-09-15',1)",
       ),
       /foreign key/i,
+    );
+    // Fase 0C: deleting a user must cascade into aristo.profiles and
+    // aristo.tenant_members — there is no account-deletion endpoint in the
+    // app yet, so this exercises the FK constraints directly.
+    await db.exec(
+      "INSERT INTO aristo.profiles(user_id,full_name) VALUES('a','A')",
+    );
+    await db.exec(
+      `INSERT INTO aristo.tenant_members(tenant_id,user_id,role)
+       SELECT id,'a','STUDENT' FROM aristo.tenants WHERE slug='mentoria-coelho'`,
+    );
+    await db.exec("DELETE FROM aristo.users WHERE id='a'");
+    assert.equal(
+      (await db.query("SELECT count(*) AS total FROM aristo.profiles WHERE user_id='a'"))
+        .rows[0].total,
+      0,
+    );
+    assert.equal(
+      (
+        await db.query(
+          "SELECT count(*) AS total FROM aristo.tenant_members WHERE user_id='a'",
+        )
+      ).rows[0].total,
+      0,
+    );
+    // SUPER_ADMIN is never a tenant_members value — the CHECK constraint
+    // enforces this even if application code ever tried it by mistake.
+    await assert.rejects(
+      db.exec(
+        `INSERT INTO aristo.tenant_members(tenant_id,user_id,role)
+         SELECT id,'b','SUPER_ADMIN' FROM aristo.tenants WHERE slug='mentoria-coelho'`,
+      ),
+      /check/i,
     );
     await db.exec("CREATE ROLE client_test; SET ROLE client_test");
     await assert.rejects(
