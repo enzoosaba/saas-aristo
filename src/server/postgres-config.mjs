@@ -58,7 +58,7 @@ export function postgresSql(sql) {
     },
   );
   result = result.replace(
-    /\b(FROM|JOIN|INTO|UPDATE)\s+(users|mentor_students|sessions|items|records|plans|rate_limits|questions|study_sessions|demo_batches|password_resets)\b/gi,
+    /\b(FROM|JOIN|INTO|UPDATE)\s+(users|mentor_students|sessions|items|records|plans|rate_limits|questions|study_sessions|demo_batches|password_resets|tenants|profiles|tenant_members|platform_admins|tenant_settings|audit_logs)\b/gi,
     "$1 aristo.$2",
   );
   if (ignore) result += " ON CONFLICT DO NOTHING";
