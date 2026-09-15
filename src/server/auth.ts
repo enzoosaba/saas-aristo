@@ -21,7 +21,7 @@ export async function passwordMatches(password: string, stored: string) {
   );
 }
 export async function currentUser(): Promise<User | null> {
-  const token = (await cookies()).get("coelho-session")?.value;
+  const token = (await cookies()).get("aristo-session")?.value;
   if (!token) return null;
   return (
     ((await db()
@@ -43,7 +43,7 @@ export async function createSession(userId: string) {
   await db()
     .prepare("INSERT INTO sessions(token,user_id,expires) VALUES(?,?,?)")
     .run(hash(token), userId, Date.now() + maxAge * 1000);
-  (await cookies()).set("coelho-session", token, {
+  (await cookies()).set("aristo-session", token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -53,8 +53,8 @@ export async function createSession(userId: string) {
 }
 export async function logout() {
   const jar = await cookies();
-  const token = jar.get("coelho-session")?.value;
+  const token = jar.get("aristo-session")?.value;
   if (token)
     await db().prepare("DELETE FROM sessions WHERE token=?").run(hash(token));
-  jar.delete("coelho-session");
+  jar.delete("aristo-session");
 }

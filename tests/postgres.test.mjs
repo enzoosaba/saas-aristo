@@ -67,20 +67,20 @@ test("all application SQL compiles against the PostgreSQL migration", async () =
     }
     assert.ok(queries >= 35);
     await db.exec(
-      "INSERT INTO coelho.users(id,name,email,password,created_at) VALUES('a','A','a@example.test','hash',0),('b','B','b@example.test','hash',0)",
+      "INSERT INTO aristo.users(id,name,email,password,created_at) VALUES('a','A','a@example.test','hash',0),('b','B','b@example.test','hash',0)",
     );
     await db.exec(
-      "INSERT INTO coelho.items(id,user_id,data) VALUES('i','a','{}')",
+      "INSERT INTO aristo.items(id,user_id,data) VALUES('i','a','{}')",
     );
     await assert.rejects(
       db.exec(
-        "INSERT INTO coelho.records(user_id,item_id,date,target) VALUES('b','i','2026-09-15',1)",
+        "INSERT INTO aristo.records(user_id,item_id,date,target) VALUES('b','i','2026-09-15',1)",
       ),
       /foreign key/i,
     );
     await db.exec("CREATE ROLE client_test; SET ROLE client_test");
     await assert.rejects(
-      db.query("SELECT * FROM coelho.users"),
+      db.query("SELECT * FROM aristo.users"),
       /permission denied/i,
     );
     await db.exec("RESET ROLE");

@@ -5,25 +5,25 @@ import { postgresConfig, postgresSql } from "./postgres-config.mjs";
 
 type Context = { client?: PoolClient };
 const shared = globalThis as unknown as {
-  coelhoPool?: Pool;
-  coelhoContext?: AsyncLocalStorage<Context>;
-  coelhoQueue?: Promise<void>;
+  aristoPool?: Pool;
+  aristoContext?: AsyncLocalStorage<Context>;
+  aristoQueue?: Promise<void>;
 };
-const context = (shared.coelhoContext ??= new AsyncLocalStorage<Context>());
+const context = (shared.aristoContext ??= new AsyncLocalStorage<Context>());
 export const isPostgres = () => Boolean(process.env.DATABASE_URL);
 
 function pool() {
-  if (!shared.coelhoPool) {
-    shared.coelhoPool = new Pool(postgresConfig());
-    shared.coelhoPool.on("error", () => console.error("postgres_pool_error"));
+  if (!shared.aristoPool) {
+    shared.aristoPool = new Pool(postgresConfig());
+    shared.aristoPool.on("error", () => console.error("postgres_pool_error"));
   }
-  return shared.coelhoPool;
+  return shared.aristoPool;
 }
 
 async function exclusive<T>(work: () => Promise<T>): Promise<T> {
-  const previous = shared.coelhoQueue ?? Promise.resolve();
+  const previous = shared.aristoQueue ?? Promise.resolve();
   let release!: () => void;
-  shared.coelhoQueue = new Promise<void>((resolve) => {
+  shared.aristoQueue = new Promise<void>((resolve) => {
     release = resolve;
   });
   await previous;

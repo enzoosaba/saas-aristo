@@ -176,7 +176,7 @@ try {
   results.push("mobile mission layout and persistent daily goal controls");
   for (const theme of ["dark", "light"]) {
     await page.evaluate((t) => {
-      localStorage.setItem("coelho-theme", t);
+      localStorage.setItem("aristo-theme", t);
       document.documentElement.dataset.theme = t;
     }, theme);
     for (const width of [360, 390, 767, 768, 1023, 1024, 1440]) {

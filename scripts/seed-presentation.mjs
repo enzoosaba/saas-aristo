@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 const userId = process.argv[2];
 if (!userId) throw Error("Informe o ID da conta a preencher.");
 const db = new DatabaseSync(
-  resolve(process.env.DATABASE_PATH || "data/coelho.sqlite"),
+  resolve(process.env.DATABASE_PATH || "data/aristo.sqlite"),
 );
 db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;");
 const user = db.prepare("SELECT id,name FROM users WHERE id=?").get(userId);

@@ -88,7 +88,7 @@ export default function PerfilPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `coelho-${data.today}.json`;
+    a.download = `aristo-${data.today}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }

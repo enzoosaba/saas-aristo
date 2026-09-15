@@ -8,7 +8,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
 
 test("SQLite import preserves accounts, backs up source and refuses an occupied destination", async () => {
-  const folder = mkdtempSync(join(tmpdir(), "coelho-migration-"));
+  const folder = mkdtempSync(join(tmpdir(), "aristo-migration-"));
   process.env.DATABASE_PATH = join(folder, "source.sqlite");
   const { db: sqliteDb } = await import("../src/server/sqlite.ts");
   const source = sqliteDb();
@@ -55,11 +55,11 @@ test("SQLite import preserves accounts, backs up source and refuses an occupied 
     assert.equal(await run("scripts/migrate-postgres.mjs"), 0);
     assert.equal(await run("scripts/import-sqlite.mjs"), 0);
     const { rows } = await pg.query(
-      "SELECT password FROM coelho.users WHERE id='fixture'",
+      "SELECT password FROM aristo.users WHERE id='fixture'",
     );
     assert.equal(rows[0].password, "preserved-hash");
     assert.equal(
-      (await pg.query("SELECT done FROM coelho.records")).rows[0].done,
+      (await pg.query("SELECT done FROM aristo.records")).rows[0].done,
       1,
     );
     assert.ok(
@@ -67,7 +67,7 @@ test("SQLite import preserves accounts, backs up source and refuses an occupied 
     );
     assert.equal(await run("scripts/import-sqlite.mjs"), 1);
     assert.equal(
-      (await pg.query("SELECT count(*) AS total FROM coelho.users")).rows[0]
+      (await pg.query("SELECT count(*) AS total FROM aristo.users")).rows[0]
         .total,
       1,
     );
@@ -80,7 +80,7 @@ test("SQLite import preserves accounts, backs up source and refuses an occupied 
     await server.stop();
     await pg.close();
     // Only this test's mkdtemp directory is removed.
-    assert.ok(folder.startsWith(join(tmpdir(), "coelho-migration-")));
+    assert.ok(folder.startsWith(join(tmpdir(), "aristo-migration-")));
     rmSync(folder, { recursive: true, force: true });
   }
 });

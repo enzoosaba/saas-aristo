@@ -124,7 +124,7 @@ export default function CalendarioPage() {
           onClick={() => {
             dialog.current?.close();
             window.dispatchEvent(
-              new CustomEvent("coelho:add", { detail: { kind: "task", date } }),
+              new CustomEvent("aristo:add", { detail: { kind: "task", date } }),
             );
           }}
         >

@@ -13,10 +13,10 @@ try {
     "mentor_students",
     "password_resets",
   ]) {
-    await pool.query(`SELECT 1 FROM coelho.${table} LIMIT 1`);
+    await pool.query(`SELECT 1 FROM aristo.${table} LIMIT 1`);
   }
   const { rows } = await pool.query(
-    "SELECT name FROM coelho.migrations ORDER BY name",
+    "SELECT name FROM aristo.migrations ORDER BY name",
   );
   console.log(
     JSON.stringify({ status: "ok", migrations: rows.map((r) => r.name) }),

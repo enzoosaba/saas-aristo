@@ -3,14 +3,14 @@
 import { useSyncExternalStore } from "react";
 import { Sun, Moon } from "lucide-react";
 
-const eventName = "coelho-theme-changed";
+const eventName = "aristo-theme-changed";
 function applyTheme(theme: "dark" | "light") {
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
 }
 function subscribe(callback: () => void) {
   function onStorage(event: StorageEvent) {
-    if (event.key === "coelho-theme") {
+    if (event.key === "aristo-theme") {
       applyTheme(event.newValue === "light" ? "light" : "dark");
       callback();
     }
@@ -26,7 +26,7 @@ export default function ThemeToggle() {
   function toggle() {
     const next = theme === "dark" ? "light" : "dark";
     applyTheme(next);
-    try { localStorage.setItem("coelho-theme", next); } catch { /* The current tab can still switch themes. */ }
+    try { localStorage.setItem("aristo-theme", next); } catch { /* The current tab can still switch themes. */ }
     window.dispatchEvent(new Event(eventName));
   }
   return <button type="button" className="theme-toggle" onClick={toggle}

@@ -111,7 +111,7 @@ export default function RotinaPage() {
         className="primary-button routine-add"
         onClick={() =>
           window.dispatchEvent(
-            new CustomEvent("coelho:add", { detail: { kind: "habit", date } }),
+            new CustomEvent("aristo:add", { detail: { kind: "habit", date } }),
           )
         }
       >

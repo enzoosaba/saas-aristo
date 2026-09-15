@@ -8,7 +8,7 @@ const pool = process.env.DATABASE_URL ? new Pool(postgresConfig()) : null;
 const db = pool
   ? null
   : new DatabaseSync(
-      resolve(process.env.DATABASE_PATH || "data/coelho.sqlite"),
+      resolve(process.env.DATABASE_PATH || "data/aristo.sqlite"),
     );
 try {
   const query = async (sql, values) =>

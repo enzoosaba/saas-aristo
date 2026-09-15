@@ -5,7 +5,7 @@ import { Pool } from "pg";
 import { postgresConfig } from "../src/server/postgres-config.mjs";
 
 // Offline cutover: stop writes to the source first. Destination must be empty.
-const path = resolve(process.env.DATABASE_PATH || "data/coelho.sqlite");
+const path = resolve(process.env.DATABASE_PATH || "data/aristo.sqlite");
 if (!existsSync(path))
   throw new Error("Banco SQLite de origem não encontrado.");
 const backupFolder = resolve(process.env.BACKUP_DIR || "data/backups");
@@ -33,11 +33,11 @@ try {
   await client.query("BEGIN");
   await client.query("SELECT pg_advisory_xact_lock(2292026)");
   await client.query(
-    `LOCK TABLE ${tables.map((t) => `coelho.${t}`).join(",")} IN ACCESS EXCLUSIVE MODE`,
+    `LOCK TABLE ${tables.map((t) => `aristo.${t}`).join(",")} IN ACCESS EXCLUSIVE MODE`,
   );
   for (const table of tables) {
     const { rows } = await client.query(
-      `SELECT COUNT(*) AS total FROM coelho.${table}`,
+      `SELECT COUNT(*) AS total FROM aristo.${table}`,
     );
     if (Number(rows[0].total))
       throw new Error("Destino não está vazio; importação cancelada.");
@@ -47,12 +47,12 @@ try {
     for (const row of rows) {
       const keys = Object.keys(row);
       await client.query(
-        `INSERT INTO coelho.${table} (${keys.map((k) => `"${k}"`).join(",")}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(",")})`,
+        `INSERT INTO aristo.${table} (${keys.map((k) => `"${k}"`).join(",")}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(",")})`,
         Object.values(row),
       );
     }
     const check = await client.query(
-      `SELECT COUNT(*) AS total FROM coelho.${table}`,
+      `SELECT COUNT(*) AS total FROM aristo.${table}`,
     );
     if (Number(check.rows[0].total) !== rows.length)
       throw new Error(`Contagem divergente: ${table}`);

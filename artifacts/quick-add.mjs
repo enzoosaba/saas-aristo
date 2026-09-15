@@ -1,9 +1,9 @@
 ﻿import { chromium } from 'playwright';
 const browser=await chromium.launch({headless:true,channel:'msedge'});
 const page=await browser.newPage({viewport:{width:390,height:844}});
-await page.addInitScript(()=>{if(location.hostname==='localhost')localStorage.setItem('coelho-theme','light');});
+await page.addInitScript(()=>{if(location.hostname==='localhost')localStorage.setItem('aristo-theme','light');});
 await page.goto('http://localhost:3000');
-await page.evaluate(()=>localStorage.removeItem('coelho-study-items'));
+await page.evaluate(()=>localStorage.removeItem('aristo-study-items'));
 const trigger=page.getByRole('button',{name:'Adicionar hábito ou tarefa'});
 await trigger.click();await page.getByRole('dialog').waitFor();
 await page.screenshot({path:'artifacts/quick-add-390.png',fullPage:false});
@@ -21,6 +21,6 @@ await page.goto('http://localhost:3000/calendario');await page.getByText('Tarefa
 for(const width of [320,390,768,1440]){await page.setViewportSize({width,height:844});await trigger.click();if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('Overflow '+width);await page.keyboard.press('Escape');if(!await trigger.evaluate(e=>e===document.activeElement))throw Error('Focus not restored');}
 await page.setViewportSize({width:390,height:844});await trigger.click();await page.locator('.quick-add-options button').first().click();await page.getByLabel('Nome',{exact:true}).fill('Falha preservada');
 await page.evaluate(()=>{Storage.prototype.setItem=()=>{throw Error('Blocked');};});await page.getByRole('button',{name:'Criar hábito',exact:true}).click();await page.locator('.quick-add-error').waitFor();if(await page.getByLabel('Nome',{exact:true}).inputValue()!=='Falha preservada')throw Error('Lost draft');
-await page.evaluate(()=>localStorage.removeItem('coelho-study-items'));
+await page.evaluate(()=>localStorage.removeItem('aristo-study-items'));
 console.log('Creation, persistence, progress, task completion, modal sizes, Escape, focus restore and storage failure: passed');
 await browser.close();

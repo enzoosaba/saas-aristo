@@ -6,7 +6,7 @@ COPY . .
 RUN npm run build
 
 FROM node:22-bookworm-slim AS runtime
-ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 DATABASE_PATH=/app/data/coelho.sqlite
+ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 DATABASE_PATH=/app/data/aristo.sqlite
 WORKDIR /app
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static

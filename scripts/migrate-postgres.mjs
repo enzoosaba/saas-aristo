@@ -8,10 +8,10 @@ const client = await pool.connect();
 try {
   await client.query("BEGIN");
   await client.query("SELECT pg_advisory_xact_lock(2292026)");
-  await client.query("CREATE SCHEMA IF NOT EXISTS coelho");
-  await client.query("REVOKE ALL ON SCHEMA coelho FROM PUBLIC");
+  await client.query("CREATE SCHEMA IF NOT EXISTS aristo");
+  await client.query("REVOKE ALL ON SCHEMA aristo FROM PUBLIC");
   await client.query(
-    "CREATE TABLE IF NOT EXISTS coelho.migrations (name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
+    "CREATE TABLE IF NOT EXISTS aristo.migrations (name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
   );
   const folder = new URL("../supabase/migrations/", import.meta.url);
   for (const name of (await readdir(folder))
@@ -20,7 +20,7 @@ try {
     const sql = await readFile(new URL(name, folder), "utf8");
     const checksum = createHash("sha256").update(sql).digest("hex");
     const { rows } = await client.query(
-      "SELECT checksum FROM coelho.migrations WHERE name=$1",
+      "SELECT checksum FROM aristo.migrations WHERE name=$1",
       [name],
     );
     if (rows.length) {
@@ -30,7 +30,7 @@ try {
     }
     await client.query(sql);
     await client.query(
-      "INSERT INTO coelho.migrations(name,checksum) VALUES($1,$2)",
+      "INSERT INTO aristo.migrations(name,checksum) VALUES($1,$2)",
       [name, checksum],
     );
     console.log(`Aplicada: ${name}`);

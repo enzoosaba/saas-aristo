@@ -59,7 +59,7 @@ export function postgresSql(sql) {
   );
   result = result.replace(
     /\b(FROM|JOIN|INTO|UPDATE)\s+(users|mentor_students|sessions|items|records|plans|rate_limits|questions|study_sessions|demo_batches|password_resets)\b/gi,
-    "$1 coelho.$2",
+    "$1 aristo.$2",
   );
   if (ignore) result += " ON CONFLICT DO NOTHING";
   return result;

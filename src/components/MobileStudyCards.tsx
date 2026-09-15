@@ -180,7 +180,7 @@ export default function MobileStudyCards() {
               className="primary-button"
               onClick={() =>
                 window.dispatchEvent(
-                  new CustomEvent("coelho:add", {
+                  new CustomEvent("aristo:add", {
                     detail: { kind: "task", date: data.today },
                   }),
                 )

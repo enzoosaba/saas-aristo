@@ -12,7 +12,7 @@ const child = spawn(process.execPath, [".next/standalone/server.js"], {
   stdio: "inherit",
   env: {
     ...process.env,
-    DATABASE_PATH: resolve(process.env.DATABASE_PATH || "data/coelho.sqlite"),
+    DATABASE_PATH: resolve(process.env.DATABASE_PATH || "data/aristo.sqlite"),
     HOSTNAME: process.env.BIND_HOST || "0.0.0.0",
   },
 });

@@ -19,23 +19,23 @@ jobs:
         with:
           name: browser-results
           path: test-results/
-      - run: docker build -t mentoria-coelho:ci .
+      - run: docker build -t aristo:ci .
   postgres:
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_USER: coelho
+          POSTGRES_USER: aristo
           POSTGRES_PASSWORD: ci-only-password
-          POSTGRES_DB: coelho_test
+          POSTGRES_DB: aristo_test
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U coelho -d coelho_test"
+          --health-cmd "pg_isready -U aristo -d aristo_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      DATABASE_URL: postgresql://coelho:ci-only-password@localhost:5432/coelho_test
-      TEST_DATABASE_URL: postgresql://coelho:ci-only-password@localhost:5432/coelho_test
+      DATABASE_URL: postgresql://aristo:ci-only-password@localhost:5432/aristo_test
+      TEST_DATABASE_URL: postgresql://aristo:ci-only-password@localhost:5432/aristo_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

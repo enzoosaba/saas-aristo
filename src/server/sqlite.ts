@@ -2,12 +2,12 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-const globalDb = globalThis as unknown as { coelhoDb?: DatabaseSync };
+const globalDb = globalThis as unknown as { aristoDb?: DatabaseSync };
 export function db() {
-  if (globalDb.coelhoDb) return globalDb.coelhoDb;
+  if (globalDb.aristoDb) return globalDb.aristoDb;
   const path = resolve(
     /* turbopackIgnore: true */ process.env.DATABASE_PATH ||
-      "data/coelho.sqlite",
+      "data/aristo.sqlite",
   );
   mkdirSync(dirname(path), { recursive: true });
   const connection = new DatabaseSync(path);
@@ -37,7 +37,7 @@ export function db() {
       "ALTER TABLE users ADD COLUMN avatar TEXT; PRAGMA user_version=4;",
     );
   }
-  globalDb.coelhoDb = connection;
+  globalDb.aristoDb = connection;
   return connection;
 }
 export function transaction<T>(work: () => T): T {

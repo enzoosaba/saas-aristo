@@ -55,8 +55,8 @@ function QuickAddContent() {
       setMeasure("check");
       dialog.current?.showModal();
     }
-    window.addEventListener("coelho:add", requested);
-    return () => window.removeEventListener("coelho:add", requested);
+    window.addEventListener("aristo:add", requested);
+    return () => window.removeEventListener("aristo:add", requested);
   }, []);
   function open() {
     returnFocus.current = trigger.current;

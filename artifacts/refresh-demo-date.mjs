@@ -1,6 +1,6 @@
 ﻿import {DatabaseSync,backup} from 'node:sqlite';
 import {mkdirSync} from 'node:fs';
-const db=new DatabaseSync('data/coelho.sqlite');const id=process.argv[2];if(!id)throw Error('Informe o ID da conta.');
+const db=new DatabaseSync('data/aristo.sqlite');const id=process.argv[2];if(!id)throw Error('Informe o ID da conta.');
 if(!db.prepare('SELECT user_id FROM demo_batches WHERE user_id=?').get(id))throw Error('Conta sem dados de demonstração.');
 mkdirSync('data/backups',{recursive:true});await backup(db,`data/backups/demo-date-refresh-${Date.now()}.sqlite`);
 const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());

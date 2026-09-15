@@ -7,7 +7,7 @@ const config = postgresConfig();
 const url = new URL(config.connectionString);
 const folder = resolve("data/backups");
 mkdirSync(folder, { recursive: true });
-const file = resolve(folder, `coelho-${Date.now()}.dump`);
+const file = resolve(folder, `aristo-${Date.now()}.dump`);
 const certificate = resolve(folder, `ca-${Date.now()}.pem`);
 if (config.ssl?.ca) writeFileSync(certificate, config.ssl.ca, { mode: 0o600 });
 const env = {
@@ -34,7 +34,7 @@ async function run(command, args) {
 try {
   await run("pg_dump", [
     "--format=custom",
-    "--schema=coelho",
+    "--schema=aristo",
     "--no-owner",
     "--no-acl",
     "--file",
