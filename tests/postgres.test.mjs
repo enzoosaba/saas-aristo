@@ -127,3 +127,93 @@ test("all application SQL compiles against the PostgreSQL migration", async () =
     await db.close();
   }
 });
+
+test("Fase 1 backfill enrolls every Tenant 01 member into Turma Inicial", async () => {
+  const db = new PGlite();
+  try {
+    for (const file of readdirSync("supabase/migrations").sort())
+      await db.exec(readFileSync(`supabase/migrations/${file}`, "utf8"));
+
+    await db.exec(`
+      INSERT INTO aristo.users (id, name, email, password, role, created_at)
+      VALUES
+        ('org-mentor', 'Ana Mentor', 'ana-org@example.test', 'x', 'mentor', 1700000000000),
+        ('org-student', 'Bia Aluna', 'bia-org@example.test', 'x', 'student', 1700000001000);
+    `);
+    await db.exec(`
+      INSERT INTO aristo.profiles (user_id, full_name)
+      VALUES ('org-mentor', 'Ana Mentor'), ('org-student', 'Bia Aluna');
+      INSERT INTO aristo.tenant_members (tenant_id, user_id, role)
+      SELECT id, 'org-mentor', 'MENTOR' FROM aristo.tenants WHERE slug='mentoria-coelho';
+      INSERT INTO aristo.tenant_members (tenant_id, user_id, role)
+      SELECT id, 'org-student', 'STUDENT' FROM aristo.tenants WHERE slug='mentoria-coelho';
+    `);
+    // Re-run the backfill migration's own statements to prove the same
+    // idempotent logic also enrolls members added after Fase 0B, not just
+    // whoever existed at the moment 006 first ran.
+    await db.exec(
+      readFileSync(
+        "supabase/migrations/202609150006_organizations_backfill.sql",
+        "utf8",
+      ),
+    );
+
+    const orgs = await db.query(
+      "SELECT name FROM aristo.organizations WHERE name='Turma Inicial'",
+    );
+    assert.equal(orgs.rows.length, 1, "deve haver exatamente uma Turma Inicial");
+
+    const members = await db.query(`
+      SELECT om.user_id, om.member_role
+      FROM aristo.organization_members om
+      JOIN aristo.organizations o ON o.id = om.organization_id
+      WHERE o.name = 'Turma Inicial' AND om.user_id IN ('org-mentor','org-student')
+      ORDER BY om.user_id
+    `);
+    assert.deepEqual(
+      members.rows.map((r) => [r.user_id, r.member_role]),
+      [
+        ["org-mentor", "MENTOR"],
+        ["org-student", "STUDENT"],
+      ],
+    );
+
+    // Re-running the same backfill statements again must not duplicate rows.
+    await db.exec(
+      readFileSync(
+        "supabase/migrations/202609150006_organizations_backfill.sql",
+        "utf8",
+      ),
+    );
+    const total = await db.query(
+      `SELECT count(*) AS total FROM aristo.organization_members WHERE user_id IN ('org-mentor','org-student')`,
+    );
+    assert.equal(Number(total.rows[0].total), 2);
+
+    // TENANT_ADMIN would never be auto-enrolled by this backfill (it filters
+    // on role IN ('MENTOR','STUDENT')); organization_members.member_role
+    // itself also rejects anything outside MENTOR/STUDENT. Uses a second,
+    // otherwise-unused organization so this only exercises the CHECK
+    // constraint, not the (organization_id,user_id) UNIQUE constraint.
+    const [tenant] = (
+      await db.query("SELECT id FROM aristo.tenants WHERE slug='mentoria-coelho'")
+    ).rows;
+    await db.exec(
+      `INSERT INTO aristo.organizations(tenant_id,name) VALUES ('${tenant.id}','Turma Secundária')`,
+    );
+    const [otherOrg] = (
+      await db.query(
+        "SELECT id FROM aristo.organizations WHERE name='Turma Secundária'",
+      )
+    ).rows;
+    await assert.rejects(
+      db.exec(
+        `INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role)
+         VALUES ('${tenant.id}','${otherOrg.id}','org-student','SUPER_ADMIN')`,
+      ),
+      /check/i,
+    );
+  } finally {
+    await db.close();
+  }
+});
