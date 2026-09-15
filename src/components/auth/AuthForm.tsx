@@ -2,16 +2,22 @@
 import { useState } from "react";
 import Image from "next/image";
 import ThemeToggle from "../ThemeToggle";
+import PasswordRecovery from "./PasswordRecovery";
 export default function AuthForm({
   onSuccess,
   connectionError,
+  resetToken = "",
+  onRecoveryClose,
 }: {
   onSuccess: () => Promise<void>;
   connectionError: string;
+  resetToken?: string;
+  onRecoveryClose?: () => void;
 }) {
   const [register, setRegister] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [recovering, setRecovering] = useState(false);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -53,59 +59,79 @@ export default function AuthForm({
         <p className="eyebrow">SEU PRÓXIMO PASSO COMEÇA AQUI</p>
         <h1>{register ? "Crie seu espaço." : "Bom ter você aqui."}</h1>
         <p>Organize sua rotina e acompanhe cada conquista.</p>
-        <form onSubmit={submit} className="quick-add-form">
-          {register && (
+        {recovering || resetToken ? (
+          <PasswordRecovery
+            token={resetToken}
+            onBack={() => {
+              setRecovering(false);
+              onRecoveryClose?.();
+            }}
+          />
+        ) : (
+          <form onSubmit={submit} className="quick-add-form">
+            {register && (
+              <label>
+                Seu nome
+                <input
+                  name="name"
+                  required
+                  minLength={2}
+                  maxLength={80}
+                  autoComplete="name"
+                />
+              </label>
+            )}
             <label>
-              Seu nome
+              E-mail
               <input
-                name="name"
+                name="email"
+                type="email"
                 required
-                minLength={2}
-                maxLength={80}
-                autoComplete="name"
+                maxLength={254}
+                autoComplete="email"
               />
             </label>
-          )}
-          <label>
-            E-mail
-            <input
-              name="email"
-              type="email"
-              required
-              maxLength={254}
-              autoComplete="email"
-            />
-          </label>
-          <label>
-            Senha
-            <input
-              name="password"
-              type="password"
-              required
-              minLength={12}
-              maxLength={128}
-              autoComplete={register ? "new-password" : "current-password"}
-            />
-          </label>
-          <p className="field-hint">Use pelo menos 12 caracteres.</p>
-          {(error || connectionError) && (
-            <p role="alert">{error || connectionError}</p>
-          )}
-          <button type="submit" className="primary-button" disabled={busy}>
-            {busy ? "Aguarde…" : register ? "Criar conta" : "Entrar"}
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            className="panel-link"
-            onClick={() => {
-              setRegister(!register);
-              setError("");
-            }}
-          >
-            {register ? "Já tenho uma conta" : "Criar minha conta"}
-          </button>
-        </form>
+            <label>
+              Senha
+              <input
+                name="password"
+                type="password"
+                required
+                minLength={12}
+                maxLength={128}
+                autoComplete={register ? "new-password" : "current-password"}
+              />
+            </label>
+            <p className="field-hint">Use pelo menos 12 caracteres.</p>
+            {(error || connectionError) && (
+              <p role="alert">{error || connectionError}</p>
+            )}
+            <button type="submit" className="primary-button" disabled={busy}>
+              {busy ? "Aguarde…" : register ? "Criar conta" : "Entrar"}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className="panel-link"
+              onClick={() => {
+                setRegister(!register);
+                setError("");
+              }}
+            >
+              {register ? "Já tenho uma conta" : "Criar minha conta"}
+            </button>
+            {!register && (
+              <button
+                type="button"
+                className="panel-link"
+                disabled={busy}
+                onClick={() => setRecovering(true)}
+              >
+                Esqueci minha senha
+              </button>
+            )}
+          </form>
+        )}
       </section>
     </main>
   );

@@ -1,7 +1,14 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { Target, ArrowUpRight, ChartNoAxesCombined } from "lucide-react";
+import {
+  Target,
+  ArrowUpRight,
+  ChartNoAxesCombined,
+  ListChecks,
+  Plus,
+  CalendarDays,
+} from "lucide-react";
 import Card from "./ui/Card";
 import ProgressBar from "./ui/ProgressBar";
 import { useStudy } from "./StudyProvider";
@@ -15,6 +22,42 @@ export function MissionsPanel() {
     (r) =>
       r.done && r.date >= dayOffset(data.today, -6) && r.date <= data.today,
   ).length;
+  const periodDays = week
+    ? Array.from({ length: 7 }, (_, i) => dayOffset(data.today, i - 6))
+    : [data.today];
+  const missions = data.items
+    .map((item) => {
+      const dates = periodDays.filter((d) => isScheduled(item, d));
+      const goal = dates.length * (item.measure === "count" ? item.target : 1);
+      const value = dates.reduce((sum, d) => {
+        const r = data.records.find(
+          (r) => r.itemId === item.id && r.date === d,
+        );
+        return (
+          sum +
+          (item.measure === "count"
+            ? Math.min(r?.value || 0, item.target)
+            : Number(r?.done || false))
+        );
+      }, 0);
+      return { item, goal, value };
+    })
+    .filter((m) => m.goal > 0);
+  const doneUnits = periodDays.reduce(
+    (sum, d) =>
+      sum +
+      data.items.filter(
+        (i) =>
+          isScheduled(i, d) &&
+          data.records.some((r) => r.itemId === i.id && r.date === d && r.done),
+      ).length,
+    0,
+  );
+  const totalUnits = periodDays.reduce(
+    (sum, d) => sum + data.items.filter((i) => isScheduled(i, d)).length,
+    0,
+  );
+  const completion = totalUnits ? Math.round((doneUnits / totalUnits) * 100) : 0;
   return (
     <Card className="missions-panel">
       <div className="panel-title">
@@ -31,81 +74,123 @@ export function MissionsPanel() {
           </button>
         </div>
       </div>
-      <p className="panel-description">
-        {week
-          ? `${doneWeek} realizações nos últimos 7 dias.`
-          : `${metrics.todayDone} de ${metrics.todayTotal} atividades concluídas hoje.`}
-      </p>
-      {!week &&
-        rows.slice(0, 4).map((item) => {
-          const log = data.records.find(
-            (r) => r.itemId === item.id && r.date === data.today,
-          );
-          return (
-            <div className="mission-row" key={item.id}>
+      <div className="mobile-mission-content">
+        <div className="mission-summary-line">
+          <strong>{completion}% concluídas</strong>
+          <span>
+            <b>{week ? doneWeek * 20 : metrics.todayXp}</b> XP
+          </span>
+        </div>
+        {missions.slice(0, 4).map(({ item, goal, value }) => (
+          <div className="reference-mission-row" key={item.id}>
+            <span
+              className="mini-progress"
+              aria-hidden="true"
+              style={{
+                background: `conic-gradient(var(--brand-orange) ${(value / goal) * 100}%, var(--border-default) 0)`,
+              }}
+            >
+              <span>
+                <ListChecks size={23} />
+              </span>
+            </span>
+            <div>
+              <p>
+                <strong>{value.toLocaleString("pt-BR")}</strong>
+                <span>
+                  /{goal.toLocaleString("pt-BR")}
+                  {item.unit ? ` ${item.unit}` : ""}
+                </span>
+              </p>
+              <h3>{item.title}</h3>
+            </div>
+          </div>
+        ))}
+        {!missions.length && (
+          <div className="study-empty">
+            <ListChecks size={28} />
+            <strong>Sua primeira missão começa aqui</strong>
+            <p>Adicione um hábito ou uma tarefa à sua rotina.</p>
+          </div>
+        )}
+        <div className="mission-quick-links">
+          <Link href="/questoes">
+            <Plus size={20} />
+            Questões
+          </Link>
+          <Link href="/rotina">
+            <CalendarDays size={20} />
+            Minha rotina
+          </Link>
+        </div>
+      </div>
+      <div className="desktop-mission-content">
+        <p className="panel-description">
+          {week
+            ? `${doneWeek} realizações nos últimos 7 dias.`
+            : `${metrics.todayDone} de ${metrics.todayTotal} atividades concluídas hoje.`}
+        </p>
+        {!week && (
+          <div className="mission-ring-wrap">
+            <div
+              className="question-ring"
+              role="img"
+              aria-label={`${metrics.todayDone} de ${metrics.todayTotal} atividades concluídas`}
+              style={{
+                background: `conic-gradient(var(--brand-orange) ${metrics.todayTotal ? (metrics.todayDone / metrics.todayTotal) * 100 : 0}%, var(--border-default) 0)`,
+              }}
+            >
               <div>
-                <div className="mission-line">
-                  <strong>{item.title}</strong>
-                  <span>
-                    {item.measure === "count"
-                      ? `${log?.value || 0}/${item.target}`
-                      : log?.done
-                        ? "Concluído"
-                        : "Pendente"}
-                  </span>
-                </div>
-                <ProgressBar
-                  label={item.title}
-                  value={
-                    item.measure === "count"
-                      ? log?.value || 0
-                      : Number(log?.done || false)
-                  }
-                  max={item.measure === "count" ? item.target : 1}
-                />
+                <strong>
+                  {metrics.todayDone}/{metrics.todayTotal}
+                </strong>
+                <span>concluídas</span>
               </div>
             </div>
-          );
-        })}
-      {rows.length === 0 && !week && (
-        <div className="study-empty">
-          <strong>Seu próximo passo</strong>
-          <p>Crie uma atividade pelo botão + para começar.</p>
-        </div>
-      )}
-      <Link href="/rotina" className="panel-link">
-        Gerenciar minha rotina
-        <ArrowUpRight size={16} />
-      </Link>
-    </Card>
-  );
-}
-export function QuestionsPanel() {
-  const { data } = useStudy();
-  const metrics = progress(data.items, data.records, data.today);
-  return (
-    <Card className="questions-panel">
-      <div className="panel-title">
-        <h2>Conquistas do dia</h2>
+          </div>
+        )}
+        {!week &&
+          rows.slice(0, 4).map((item) => {
+            const log = data.records.find(
+              (r) => r.itemId === item.id && r.date === data.today,
+            );
+            return (
+              <div className="mission-row" key={item.id}>
+                <div>
+                  <div className="mission-line">
+                    <strong>{item.title}</strong>
+                    <span>
+                      {item.measure === "count"
+                        ? `${log?.value || 0}/${item.target}`
+                        : log?.done
+                          ? "Concluído"
+                          : "Pendente"}
+                    </span>
+                  </div>
+                  <ProgressBar
+                    label={item.title}
+                    value={
+                      item.measure === "count"
+                        ? log?.value || 0
+                        : Number(log?.done || false)
+                    }
+                    max={item.measure === "count" ? item.target : 1}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        {rows.length === 0 && !week && (
+          <div className="study-empty">
+            <strong>Seu próximo passo</strong>
+            <p>Crie uma atividade pelo botão + para começar.</p>
+          </div>
+        )}
+        <Link href="/rotina" className="panel-link">
+          Gerenciar minha rotina
+          <ArrowUpRight size={16} />
+        </Link>
       </div>
-      <div className="real-metrics">
-        <div>
-          <strong>{metrics.todayXp}</strong>
-          <p>XP conquistado hoje</p>
-        </div>
-        <div>
-          <strong>{metrics.streak}</strong>
-          <p>dias de constância</p>
-        </div>
-      </div>
-      <p className="panel-description">
-        Cada atividade concluída vale 20 XP. Desmarcar uma conclusão também
-        ajusta seus pontos.
-      </p>
-      <Link href="/perfil" className="panel-link">
-        Ver meu histórico
-        <ArrowUpRight size={16} />
-      </Link>
     </Card>
   );
 }

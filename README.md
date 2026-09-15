@@ -2,7 +2,11 @@
 
 Aplicação de estudos com Next.js, React, TypeScript, Tailwind, Onest e a identidade laranja aprovada. O núcleo funcional usa contas individuais, sessões no servidor, hábitos recorrentes, tarefas, planejamento por data e progresso derivado do histórico.
 
-**Estado:** núcleo funcional validado localmente. A publicação externa e sua verificação não foram executadas. Não equivale a lançamento público completo: recuperação/verificação de e-mail, operação de produção e revisão de segurança externa ainda precisam ser finalizadas. A área do mentor permanece futura.
+**Estado:** núcleo funcional e integração PostgreSQL validados localmente. A publicação externa e sua verificação não foram executadas. A recuperação de senha está implementada e precisa de remetente configurado; verificação de e-mail no cadastro ainda não existe. A área do mentor em /mentoria tem testes de permissões e acompanhamento de alunos. Financeiro e Frases permanecem etapas futuras. Veja o roteiro abaixo para homologação e operação de produção.
+
+## Entrega de setembro
+
+Veja [o roteiro de entrega e configuração do Supabase](docs/ENTREGA-22-SETEMBRO.md) para o estado atual, migração de dados, recuperação de senha, testes e pendências externas. `DATABASE_URL` ativa PostgreSQL; sem ela, o desenvolvimento local continua com SQLite.
 
 ## Executar
 
@@ -24,6 +28,9 @@ Copie `.env.example` para `.env.local` no desenvolvimento. Em produção, forne�
 | Variável | Uso |
 |---|---|
 | DATABASE_PATH | Caminho do arquivo SQLite; padrão local `data/coelho.sqlite`. Em produção, use caminho absoluto em volume persistente. |
+| DATABASE_URL | Conexão PostgreSQL/Supabase privada; tem prioridade sobre SQLite. |
+| DATABASE_SSL_CA | Certificado CA opcional para TLS do banco. |
+| RESEND_API_KEY / EMAIL_FROM | Envio de recuperação de senha por remetente verificado. |
 | APP_ORIGIN | Origem exata, sem barra final. Ex.: `https://seu-dominio`. Mutações com outra origem são rejeitadas. |
 | PORT | Porta HTTP; padrão 3000. |
 | BIND_HOST | Bind do launcher local; padrão 0.0.0.0. |
@@ -51,12 +58,12 @@ O launcher prepara os assets e executa o servidor standalone do Next. Contas e d
 - Realizações por data, sem sobrescrever outros dias. A conclusão de tarefa fica registrada na data em que foi feita, separada da data agendada.
 - Rotina e agenda compartilham os mesmos registros; tarefas atrasadas são identificadas em Todos os itens.
 - Planejamento independente para cada dia, com detecção de edição concorrente.
-- XP, nível, sequência e gráfico semanal derivados das realizações reais; sem números de demonstração nas telas ativas.
+- XP, nível, sequência e gráfico semanal derivados dos registros. Contas preenchidas com dados fictícios mostram a identificação de demonstração.
 - Cada realização concluída vale 20 XP, cada nível corresponde a 200 XP. Desmarcar ajusta os pontos. A sequência conta dias consecutivos com alguma conclusão, não apenas acessos.
 - Perfil editável, exportação dos dados ativos/histórico da conta e temas claro/escuro persistentes.
 - Falhas de rede preservam os formulários; escrita offline não é enfileirada.
 
-Itens antigos do protótipo continuam no armazenamento do navegador, mas não são importados automaticamente: o navegador pode ter sido compartilhado por mais de uma pessoa. O arquivo mock-data permanece apenas como referência antiga; as telas atuais não o importam.
+Itens antigos do protótipo continuam no armazenamento do navegador, mas não são importados automaticamente: o navegador pode ter sido compartilhado por mais de uma pessoa. Os módulos de protótipo mock-data.ts e study-items.ts foram removidos; toda a leitura vem do servidor.
 
 ## Estrutura
 
@@ -82,12 +89,15 @@ src/
     PersonalItems.tsx      contagem, conclusão e arquivamento
     PasswordForm.tsx
     StudyPanels.tsx        indicadores reais
-    StudentOverview.tsx
+    DesktopOverview.tsx / MobileStudyCards.tsx
+    QuestionAnalytics.tsx  desempenho em questões
+    WeeklyPlanner.tsx      sessões de estudo da semana
     MainNav.tsx / TopBar.tsx / ThemeToggle.tsx / ScrollEffects.tsx
     ui/                    Card, ProgressBar e DashboardSidebar
   lib/domain.ts            tipos e regras puras de data/progresso
   server/
-    db.ts                  schema SQLite v1 e transações
+    db.ts / database.ts    acesso assíncrono SQLite/PostgreSQL e transações
+    sqlite.ts              schema local e compatibilidade dos dados existentes
     auth.ts                senha e sessão
     http.ts                origem, corpo, erros e limites
     validation.ts          schemas Zod

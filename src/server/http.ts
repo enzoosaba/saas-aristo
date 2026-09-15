@@ -18,8 +18,17 @@ export function json(data: unknown, status = 200) {
 }
 export async function body(request: Request) {
   const origin = request.headers.get("origin");
-  const expected = process.env.APP_ORIGIN || new URL(request.url).origin;
-  if (origin !== expected) throw new HttpError(403, "Origem não autorizada.");
+  const expectedHost = process.env.APP_ORIGIN
+    ? new URL(process.env.APP_ORIGIN).origin
+    : new URL(request.url).origin;
+  let originHost: string | null = null;
+  try {
+    originHost = origin ? new URL(origin).origin : null;
+  } catch {
+    originHost = null;
+  }
+  if (!originHost || originHost !== expectedHost)
+    throw new HttpError(403, "Origem não autorizada.");
   if (!request.headers.get("content-type")?.includes("application/json"))
     throw new HttpError(415, "Envie dados em JSON.");
   const reader = request.body?.getReader();
@@ -30,7 +39,7 @@ export async function body(request: Request) {
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
-    if (total > 24000) {
+    if (total > 200000) {
       await reader.cancel();
       throw new HttpError(413, "Conteúdo muito grande.");
     }
@@ -42,16 +51,16 @@ export async function body(request: Request) {
     throw new HttpError(400, "Dados inválidos.");
   }
 }
-export function limit(key: string, max = 60, duration = 60000) {
+export async function limit(key: string, max = 60, duration = 60000) {
   const now = Date.now();
   const connection = db();
-  connection.prepare("DELETE FROM rate_limits WHERE until < ?").run(now);
+  await connection.prepare("DELETE FROM rate_limits WHERE until < ?").run(now);
   const hash = createHash("sha256").update(key).digest("hex");
-  const entry = connection
+  const entry = (await connection
     .prepare(
-      `INSERT INTO rate_limits(key,hits,until) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET hits=hits+1 RETURNING hits`,
+      `INSERT INTO rate_limits(key,hits,until) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET hits=rate_limits.hits+1 RETURNING hits`,
     )
-    .get(hash, now + duration) as { hits: number };
+    .get(hash, now + duration)) as { hits: number };
   if (entry.hits > max)
     throw new HttpError(429, "Muitas tentativas. Aguarde alguns minutos.");
 }

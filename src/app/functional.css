@@ -172,7 +172,107 @@ button:disabled {
 .account-form .primary-button {
   width: max-content;
 }
-@media (min-width: 1100px) {
+.profile-avatar-edit {
+  position: relative;
+  flex-shrink: 0;
+}
+.avatar-edit-button {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand-gradient);
+  color: #241609;
+  border: 2px solid var(--surface-card);
+}
+.avatar-remove-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.avatar-remove-button:hover {
+  color: var(--foreground);
+}
+.account-form input:disabled {
+  opacity: 0.7;
+}
+.mentor-roster {
+  display: flex;
+  flex-direction: column;
+  margin-top: 16px;
+}
+.mentor-roster li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-default);
+}
+.mentor-roster li:last-child {
+  border-bottom: none;
+}
+.mentor-roster-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.mentor-roster-item span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.mentor-roster-item small {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mentor-roster-item.is-current {
+  color: var(--accent-text);
+}
+.mentor-activity-list,
+.mentor-session-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+}
+.mentor-activity-list li,
+.mentor-session-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-default);
+  font-size: 13px;
+}
+.mentor-activity-list li:last-child,
+.mentor-session-list li:last-child {
+  border-bottom: none;
+}
+.mentor-activity-list li.is-done strong {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+.mentor-reflection p {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.mentor-reflection strong {
+  color: var(--accent-text);
+}
+@media (min-width: 1024px) {
   .real-metrics {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }

@@ -1,6 +1,7 @@
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { Buffer } from "node:buffer";
 const base = process.env.TEST_BASE_URL || "http://localhost:3100";
 const browser = await chromium.launch({
   headless: true,
@@ -38,6 +39,7 @@ try {
   await page.getByRole("button", { name: "Criar conta", exact: true }).click();
   await page.getByRole("heading", { name: "Olá, Aluno" }).waitFor();
   checks.push("registration and authenticated dashboard");
+  const todayDate = (await state()).today;
   await page
     .getByRole("button", { name: "Adicionar hábito ou tarefa" })
     .click();
@@ -200,11 +202,49 @@ try {
   await page.getByRole("button", { name: "Criar tarefa", exact: true }).click();
   await page.getByRole("button", { name: "Concluir", exact: true }).click();
   await page.goto(base + "/calendario");
+  await page.getByRole("button",{name:"Hoje",exact:true}).click();
   await page.getByText("Revisão diária", { exact: true }).waitFor();
   checks.push("new task appears in the calendar");
-  for (const width of [320, 390, 768, 1100, 1440]) {
+  await page.goto(base + "/planos");
+  await page
+    .getByRole("button", { name: "Nova sessão", exact: true })
+    .click();
+  await page.getByLabel("Nome da sessão").fill("Bloco de revisão E2E");
+  await page.getByLabel("Matéria da sessão").fill("Matemática");
+  await page.getByLabel("Dia da sessão").fill(todayDate);
+  await page.getByLabel("Início da sessão").fill("08:30");
+  await page.getByLabel("Duração em minutos").fill("90");
+  await page.getByRole("button", { name: "Salvar sessão", exact: true }).click();
+  await page.getByText("Bloco de revisão E2E", { exact: true }).first().waitFor();
+  s = await state();
+  assert.equal(s.sessions.length, 1);
+  assert.equal(s.sessions[0].start, "08:30");
+  assert.equal(s.sessions[0].duration, 90);
+  await page.goto(base + "/calendario");
+  await page.getByRole("button", { name: "Hoje", exact: true }).click();
+  await page.getByText("08:30 — 10:00", { exact: false }).waitFor();
+  checks.push("study session persists and reaches the calendar");
+  await page.goto(base + "/perfil");
+  const before = (await state()).user.avatar || null;
+  assert.equal(before, null);
+  await page.setInputFiles('input[type="file"]', {
+    name: "avatar.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    ),
+  });
+  await page.getByText("Foto de perfil atualizada.", { exact: true }).waitFor();
+  s = await state();
+  assert.ok(String(s.user.avatar || "").startsWith("data:image/"));
+  await page.getByRole("button", { name: "Remover foto", exact: true }).click();
+  await page.getByText("Foto de perfil removida.", { exact: true }).waitFor();
+  assert.equal((await state()).user.avatar, null);
+  checks.push("profile photo upload and removal");
+  for (const width of [320, 360, 390, 767, 768, 1023, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
-    for (const route of ["/", "/rotina", "/planos", "/calendario", "/perfil"]) {
+    for (const route of ["/", "/rotina", "/planos", "/calendario", "/perfil", "/questoes"]) {
       await page.goto(base + route);
       await page.locator(".app-shell").waitFor();
       assert.equal(
@@ -216,7 +256,7 @@ try {
       );
     }
   }
-  checks.push("five routes across five responsive widths");
+  checks.push("six routes across eight responsive widths");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(base);
   await page.getByRole("button", { name: "Ativar tema claro" }).click();

@@ -1,0 +1,403 @@
+.streak-with-fire {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.hero-streak-number {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+}
+.hero-streak-number > svg {
+  width: 44px;
+  height: 52px;
+  flex-shrink: 0;
+}
+.app-shell .hero-streak-number > .lucide {
+  stroke: #0d0101;
+  fill: #0d010115;
+}
+.demo-data-label {
+  align-self: flex-start;
+  border: 1px solid var(--border-warm);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--accent-text);
+  background: var(--surface-warm);
+}
+.weekly-planner {
+  min-width: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 24px;
+  background: var(--surface-card);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.weekly-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.weekly-heading h2 {
+  font-size: 24px;
+  margin-top: 8px;
+}
+.weekly-heading p:not(.eyebrow) {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+.weekly-heading .primary-button {
+  min-height: 48px;
+  margin: 0;
+}
+.week-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.week-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.week-pagination button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-default);
+  display: grid;
+  place-items: center;
+}
+.week-pagination strong {
+  font-size: 14px;
+}
+.week-pagination button:last-child {
+  font-size: 13px;
+}
+.week-toolbar > span {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--accent-text);
+  font-size: 13px;
+}
+.week-board {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(126px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  padding: 0 0 12px;
+  scroll-snap-type: x proximity;
+  align-items: stretch;
+  min-width: 0;
+}
+.week-day {
+  background: var(--surface-input);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  min-height: 310px;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 8px;
+  scroll-snap-align: start;
+  min-width: 0;
+}
+.week-day[data-today="true"] {
+  border-color: var(--accent-text);
+}
+.week-day header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.week-day header strong {
+  font-size: 24px;
+  color: var(--foreground);
+}
+.week-day[data-today="true"] header strong {
+  color: var(--accent-text);
+}
+.week-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+.study-session-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 10px;
+  min-height: 120px;
+  text-align: left;
+  background: var(--surface-warm);
+  border: 1px solid var(--border-warm);
+  border-left: 3px solid var(--brand-orange);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+  cursor: grab;
+}
+.study-session-block:active {
+  cursor: grabbing;
+}
+.study-session-block time {
+  font-size: 11px;
+  color: var(--accent-text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.study-session-block strong {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.study-session-block > span,
+.study-session-block small {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.study-session-block small {
+  border-radius: 6px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-warm);
+}
+.add-day-session {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 44px;
+  font-size: 12px;
+  color: var(--accent-text);
+  margin-top: 12px;
+}
+.day-free {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-block: 24px;
+}
+.week-help {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.planner-status {
+  font-size: 14px;
+  color: var(--accent-text);
+}
+.planner-status:empty {
+  display: none;
+}
+.week-day-picker {
+  display: none;
+}
+.session-dialog {
+  width: calc(100% - 32px);
+  max-width: 520px;
+  max-height: 90dvh;
+  border: 1px solid var(--border-default);
+  border-radius: 24px;
+  padding: 24px;
+  background: var(--surface-card);
+  color: var(--foreground);
+  margin: auto;
+  overflow: auto;
+}
+.session-dialog::backdrop {
+  background: #0009;
+  backdrop-filter: blur(5px);
+}
+.session-dialog h2 {
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.session-dialog .section-heading > button {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
+.session-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+.session-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+.session-form :is(input, textarea) {
+  width: 100%;
+  min-height: 44px;
+  background: var(--surface-input);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 16px;
+  color: var(--foreground);
+}
+.session-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.session-form-row > * {
+  min-width: 0;
+}
+.session-form [role="alert"] {
+  color: var(--accent-text);
+  font-size: 14px;
+}
+.session-delete,
+.session-delete-confirm button {
+  min-height: 44px;
+  padding: 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+}
+.session-delete-confirm {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.session-delete-confirm p {
+  width: 100%;
+  font-size: 14px;
+}
+.daily-plan-heading {
+  margin-top: 24px;
+}
+.weekly-plan-count {
+  font-size: 13px;
+  color: var(--accent-text);
+  margin-top: auto;
+  padding-top: 20px;
+}
+.calendar-sessions {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.calendar-session {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: var(--surface-warm);
+  border: 1px solid var(--border-warm);
+  border-radius: 14px;
+}
+.calendar-session span {
+  font-size: 13px;
+  color: var(--accent-text);
+}
+@media (max-width: 767px) {
+  .weekly-planner {
+    padding: 20px 16px;
+  }
+  .weekly-heading .primary-button {
+    width: 100%;
+    justify-content: center;
+  }
+  .week-pagination {
+    gap: 4px;
+  }
+  .week-pagination strong {
+    font-size: 12px;
+  }
+  .week-toolbar {
+    align-items: flex-start;
+  }
+  .week-day-picker {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 2px;
+  }
+  .week-day-picker button {
+    min-height: 54px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border-radius: 10px;
+    font-size: 11px;
+  }
+  .week-day-picker button[aria-pressed="true"] {
+    background: var(--brand-gradient);
+    color: #0d0101;
+  }
+  .week-day-picker strong {
+    font-size: 15px;
+  }
+  .week-board {
+    display: block;
+    overflow: visible;
+  }
+  .week-day {
+    display: none;
+    min-height: 220px;
+    padding: 16px;
+  }
+  .week-day[data-selected="true"] {
+    display: flex;
+  }
+  .week-day header {
+    display: none;
+  }
+  .study-session-block {
+    min-height: 110px;
+    padding: 16px;
+  }
+  .study-session-block strong {
+    font-size: 16px;
+  }
+  .study-session-block time,
+  .study-session-block > span,
+  .study-session-block small {
+    font-size: 13px;
+  }
+  .session-dialog {
+    position: fixed;
+    inset: auto 0 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border-radius: 24px 24px 0 0;
+    padding: 20px 20px calc(24px + env(safe-area-inset-bottom));
+  }
+  .session-dialog .section-heading {
+    flex-wrap: nowrap;
+  }
+  .session-dialog h2 {
+    font-size: 18px;
+  }
+  .hero-streak-number > svg {
+    width: 36px;
+    height: 44px;
+  }
+}
+
+@media(max-width:767px){.week-day-picker{grid-template-columns:repeat(7,minmax(44px,1fr));overflow-x:auto;padding-bottom:4px}}

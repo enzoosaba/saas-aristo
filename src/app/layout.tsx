@@ -3,8 +3,13 @@ import { Onest, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./theme.css";
 import "./functional.css";
+import "./responsive.css";
+import "./mobile-reference.css";
+import "./ux-refinement.css";
+import "./desktop-reference.css";
+import "./weekly-planner.css";
 import ScrollEffects from "@/components/ScrollEffects";
-import StudentOverview from "@/components/StudentOverview";
+
 import DashboardSidebar from "@/components/ui/dashboard-sidebar";
 import MainNav from "@/components/MainNav";
 import StudyProvider from "@/components/StudyProvider";
@@ -48,6 +53,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           className="brand-gradient-defs"
         >
           <defs>
+            <filter id="coelho-logo-orange" colorInterpolationFilters="sRGB">
+              <feFlood className="brand-logo-color" />
+              <feComposite in2="SourceAlpha" operator="in" />
+            </filter>
             <linearGradient
               id="coelho-accent"
               gradientUnits="userSpaceOnUse"
@@ -72,7 +81,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <MainNav />
             <DashboardSidebar />
             <main id="conteudo" className="main-content">
-              <StudentOverview />
               {children}
             </main>
           </div>

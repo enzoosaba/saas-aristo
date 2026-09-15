@@ -111,7 +111,10 @@ export default function PersonalItems({
           );
           const value = record?.value || 0;
           const done = record?.done || false;
-          const future = selected > data.today || item.date > data.today;
+          const future = selected > data.today || item.date > selected;
+          const unscheduled =
+            item.kind === "habit" && !isScheduled(item, selected);
+          const blocked = future || unscheduled;
           return (
             <Card key={item.id} className="personal-item">
               <div className="personal-item-title">
@@ -137,7 +140,7 @@ export default function PersonalItems({
                   <div className="personal-counter">
                     <button
                       aria-label={`Diminuir ${item.title}`}
-                      disabled={!!busy || future || value <= 0}
+                      disabled={!!busy || blocked || value <= 0}
                       onClick={() => void update(item, value - 1, false)}
                     >
                       <Minus size={18} />
@@ -147,7 +150,7 @@ export default function PersonalItems({
                     </span>
                     <button
                       aria-label={`Aumentar ${item.title}`}
-                      disabled={!!busy || future || value >= item.target}
+                      disabled={!!busy || blocked || value >= item.target}
                       onClick={() => void update(item, value + 1, false)}
                     >
                       <Plus size={18} />
@@ -163,16 +166,18 @@ export default function PersonalItems({
                 <button
                   className="personal-done"
                   aria-pressed={done}
-                  disabled={!!busy || future}
+                  disabled={!!busy || blocked}
                   onClick={() => void update(item, 0, !done)}
                 >
                   <Check size={18} />
                   {done ? "Concluído" : "Marcar como concluído"}
                 </button>
               )}
-              {future && (
+              {blocked && (
                 <p className="field-hint">
-                  O registro fica disponível na data programada.
+                  {future
+                    ? "O registro fica disponível na data programada."
+                    : "Este hábito não está programado para este dia."}
                 </p>
               )}
               <div className="item-actions">

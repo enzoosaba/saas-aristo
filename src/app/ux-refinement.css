@@ -1,0 +1,284 @@
+/* Focused dashboard sections and accessible chart alternatives. */
+.home-view-switch {
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 18px;
+  background: var(--surface-card);
+  width: fit-content;
+  max-width: 100%;
+}
+.home-view-switch button {
+  min-height: 44px;
+  padding: 10px 24px;
+  border-radius: 12px;
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.home-view-switch button[aria-pressed="true"] {
+  color: #0d0101;
+  background: var(--brand-gradient);
+}
+.home-section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+.section-intro p {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+.home-workspace > .page-heading .streak-pill {
+  display: none;
+}
+.area-view-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.area-view-controls button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border-default);
+  background: var(--surface-raised);
+  border-radius: 50%;
+}
+.area-view-controls button[aria-pressed="true"] {
+  background: var(--surface-warm);
+  border-color: var(--accent-text);
+}
+.area-bar-list {
+  display: grid;
+  gap: 24px;
+  margin-top: 24px;
+  padding-bottom: 16px;
+}
+.area-bar-list > div > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.area-bar-list strong {
+  color: var(--accent-text);
+}
+.area-bar-list progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--brand-orange);
+}
+.topic-detail {
+  min-width: 0;
+  flex: 1;
+}
+.topic-detail summary {
+  display: block;
+  min-height: 44px;
+  align-content: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  padding-right: 8px;
+}
+.topic-detail summary::marker {
+  content: "";
+}
+.topic-detail summary:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.topic-detail p {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  padding-top: 8px;
+}
+.topic-detail[open] summary {
+  white-space: normal;
+}
+.home-section-content .mobile-study-cards {
+  display: grid;
+  gap: 24px;
+}
+.home-section-content .reference-reminder > strong {
+  display: block;
+  margin-top: 24px;
+  font-size: 28px;
+  line-height: 1.3;
+  color: var(--accent-text);
+  overflow-wrap: anywhere;
+}
+.home-section-content .reference-reminder > time {
+  display: block;
+  margin-top: 12px;
+  font-size: 20px;
+}
+.home-section-content .reference-reminder > p {
+  margin-block: 20px;
+  font-size: 16px;
+}
+.home-section-content .reference-reminder .primary-button {
+  margin-top: 24px;
+  min-height: 52px;
+  width: 100%;
+  justify-content: center;
+}
+@media (min-width: 1024px) {
+  .home-section-content .mobile-study-cards {
+    grid-template-columns: 1fr 1.3fr;
+    align-items: start;
+  }
+  .reference-goals {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .mobile-study-cards h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .reference-achievements > div {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 24px;
+    border: 1px solid var(--border-warm);
+    border-radius: 20px;
+  }
+  .reference-achievements > div + div {
+    margin-top: 16px;
+  }
+  .reference-achievements svg {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+  .reference-achievements p {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: right;
+    margin-left: auto;
+  }
+  .reference-achievements strong {
+    font-size: 32px;
+    color: var(--accent-text);
+  }
+  .reference-goal {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .reference-goal button {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border-default);
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .reference-goal > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    text-align: center;
+    padding: 12px;
+    border: 1px solid var(--border-default);
+    border-radius: 16px;
+  }
+  .reference-goal strong {
+    color: var(--accent-text);
+  }
+  .reference-projection-caption {
+    margin-top: 24px;
+    text-align: center;
+    color: var(--text-secondary);
+  }
+  .reference-projections {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    margin-top: 24px;
+    text-align: center;
+  }
+  .reference-projections > div {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .reference-projections strong {
+    font-size: 28px;
+    color: var(--accent-text);
+  }
+}
+@media (max-width: 1023px) {
+  .home-view-switch {
+    width: 100%;
+    padding: 4px;
+    gap: 4px;
+  }
+  .home-view-switch button {
+    flex: 1;
+    padding: 10px 8px;
+    font-size: 14px;
+  }
+  .home-workspace .questions-panel {
+    display: none;
+  }
+  .home-workspace > .page-heading {
+    margin-bottom: 0;
+  }
+  .home-workspace .shortcuts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .home-workspace .shortcut {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+    min-height: 112px;
+  }
+  .home-workspace .shortcut-arrow {
+    position: absolute;
+    right: 12px;
+    top: 16px;
+  }
+  .home-workspace .shortcut h2 {
+    font-size: 15px;
+  }
+  .home-workspace .daily-quote {
+    display: none;
+  }
+  .home-workspace .streak-highlight {
+    padding: 20px 24px;
+  }
+  .home-workspace .streak-highlight > strong {
+    font-size: 56px;
+    margin-top: 16px;
+  }
+  .home-workspace .streak-highlight > p {
+    font-size: 16px;
+  }
+  .home-workspace .streak-highlight .highlight-progress {
+    margin-top: 16px;
+  }
+}

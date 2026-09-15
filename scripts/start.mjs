@@ -1,6 +1,7 @@
 import { cpSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
+if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 if (!existsSync(".next/standalone/server.js")) {
   console.error("Execute npm run build antes de iniciar.");
   process.exit(1);

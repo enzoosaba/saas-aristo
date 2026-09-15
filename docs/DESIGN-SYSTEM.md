@@ -8,7 +8,7 @@ As cinco abas existentes: Início, Rotina, Planos, Calendário e Perfil. Next.js
   - TopBar: marca e acesso ao perfil
   - MainNav: cinco links, rota ativa via aria-current
   - main
-    - StudentOverview: resumo horizontal no desktop
+    - DesktopOverview: resumo horizontal no desktop
     - Página atual
       - Card: superfície e padding compartilhados
       - ProgressBar: porcentagem limitada a 0–100 e nome acessível contextual
@@ -63,7 +63,7 @@ Os dados continuam demonstrativos. O planejamento é local ao navegador, sem sin
 ## Criação rápida
 MainNav contém QuickAdd, com botão de 52 px e halo de 72 px. No mobile, fica elevado sobre o centro da barra de 72 px, com ícones de 24 px e textos de 12 px. As cinco abas continuam acessíveis abaixo do botão. QuickAdd usa dialog nativo: foco contido, Escape, retorno ao acionador e fechamento pelo fundo.
 
-O seletor abre formulário de hábito (frequência, tipo, quantidade/unidade, horário, notas) ou tarefa (data, prioridade, horário, notas). PersonalItems mostra os itens na Rotina e as tarefas no Calendário. study-items.ts sincroniza componentes via useSyncExternalStore, evento local e storage entre abas. Dados são locais ao navegador; não há reinício automático diário nem notificações agendadas.
+O seletor abre formulário de hábito (frequência, tipo, quantidade/unidade, horário, notas) ou tarefa (data, prioridade, horário, notas). PersonalItems mostra os itens na Rotina e as tarefas no Calendário. StudyProvider.tsx sincroniza os componentes a partir do estado do servidor. Dados ficam na conta, não no navegador; não há reinício automático diário nem notificações agendadas.
 
 Teste adicional: node artifacts/quick-add.mjs cobre criação, persistência, conclusão, contagem, erro de armazenamento, Escape e restauração do foco.
 
@@ -77,7 +77,7 @@ MainNav é um dock flutuante de 72 px, afastado 16 px das bordas e do limite inf
 ## Revisão atual — temas, tipografia e desktop
 Esta revisão substitui as descrições anteriores de paleta e navegação. A fonte principal é Onest, identificada na primeira referência, carregada com next/font. A segunda referência não identifica outra família. O laranja #ff5d00 e o laranja queimado #e85002 compõem o gradiente; superfícies escuras quentes e o branco #f9f9f9 formam os dois temas. Textos pequenos usam tons de laranja ajustados para legibilidade, em vez de gradiente sobre branco.
 
-Tokens semânticos ficam em src/app/theme.css: background, foreground, surface-card, surface-raised, surface-input, text-secondary, border-default, accent-text e brand-gradient. Os componentes existentes Card, ProgressBar, StudyPanels, StudentOverview, MainNav e QuickAdd foram reaproveitados. A escala de espaçamento e os breakpoints existentes (768 e 1100 px) foram mantidos.
+Tokens semânticos ficam em src/app/theme.css: background, foreground, surface-card, surface-raised, surface-input, text-secondary, border-default, accent-text e brand-gradient. Os componentes existentes Card, ProgressBar, StudyPanels, DesktopOverview, MainNav e QuickAdd foram reaproveitados. A escala de espaçamento e os breakpoints existentes (768 e 1100 px) foram mantidos.
 
 Estrutura: RootLayout → ScrollEffects + TopBar (ThemeToggle e QuickAdd) + DashboardSidebar + conteúdo da rota. MainNav preserva as cinco abas no dock mobile. A sidebar desktop agrupa Início em Visão geral; Rotina, Planos e Calendário em Organizar & estudar; Perfil em Minha evolução. Busca, recolhimento e atalhos de teclado continuam funcionais.
 

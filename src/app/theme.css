@@ -1,4 +1,7 @@
 /* Coelho themes: Onest, vivid orange and neutral surfaces from the references. */
+/* Recolor the supplied logo without changing its shape or alpha channel. */
+.brand-logo-color { flood-color:var(--brand-orange); }
+img[src*="coelho.png"] { filter:url(#coelho-logo-orange); }
 :root,
 html[data-theme="dark"] {
   color-scheme:dark;
@@ -111,7 +114,7 @@ html[data-theme] :is(a,button,input,textarea,select):focus-visible { outline-col
  .desktop-nav-item:hover { transform:translateX(2px); }
  .theme-toggle:hover { transform:rotate(-8deg); }
 }
-@media(min-width:1100px) {
+@media(min-width:1024px) {
  .desktop-sidebar { padding:24px 16px 16px; }
  .desktop-nav-group { margin-bottom:24px; }
  .desktop-nav-group>p { padding:0 12px; margin-bottom:12px; font-size:10px; letter-spacing:.12em; }

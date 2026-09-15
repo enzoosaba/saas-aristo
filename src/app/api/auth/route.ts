@@ -8,7 +8,7 @@ import {
   logout,
   requireUser,
 } from "@/server/auth";
-import { db } from "@/server/db";
+import { db, transaction } from "@/server/db";
 import { body, failure, HttpError, json, limit } from "@/server/http";
 export const runtime = "nodejs";
 const credentials = z
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     }
     if (input?.action === "change-password") {
       const user = await requireUser();
-      limit("password:" + user.id, 5, 15 * 60000);
+      await limit("password:" + user.id, 5, 15 * 60000);
       const change = z
         .object({
           action: z.literal("change-password"),
@@ -45,29 +45,39 @@ export async function POST(request: Request) {
         })
         .strict()
         .parse(input);
-      const row = db()
+      const row = (await db()
         .prepare("SELECT password FROM users WHERE id=?")
-        .get(user.id) as { password: string };
+        .get(user.id)) as { password: string };
       if (!(await passwordMatches(change.currentPassword, row.password)))
         throw new HttpError(400, "A senha atual não confere.");
       const nextHash = await passwordHash(change.newPassword);
-      db()
-        .prepare("UPDATE users SET password=? WHERE id=?")
-        .run(nextHash, user.id);
-      db().prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);
-      await createSession(user.id);
+      await transaction(async () => {
+        const result = await db()
+          .prepare("UPDATE users SET password=? WHERE id=? AND password=?")
+          .run(nextHash, user.id, row.password);
+        if (!result.changes)
+          throw new HttpError(
+            409,
+            "A senha mudou em outra sessão. Entre novamente.",
+          );
+        await db().prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);
+        await db()
+          .prepare("DELETE FROM password_resets WHERE user_id=?")
+          .run(user.id);
+        await createSession(user.id);
+      });
       return json({ ok: true });
     }
     const data = credentials.parse(input);
     // Shared budget is deliberately conservative without trusting forwarded client IP headers.
-    limit("auth-global", 100, 15 * 60000);
-    limit("auth:" + data.email, 10, 15 * 60000);
+    await limit("auth-global", 100, 15 * 60000);
+    await limit("auth:" + data.email, 10, 15 * 60000);
     const connection = db();
     if (data.action === "register") {
       if (!data.name) throw new HttpError(400, "Informe seu nome.");
       const password = await passwordHash(data.password);
       const id = randomUUID();
-      const result = connection
+      const result = await connection
         .prepare(
           "INSERT OR IGNORE INTO users(id,name,email,password,created_at) VALUES(?,?,?,?,?)",
         )
@@ -80,16 +90,23 @@ export async function POST(request: Request) {
       await createSession(id);
       return json({ ok: true }, 201);
     }
-    const user = connection
+    const user = (await connection
       .prepare("SELECT id,password FROM users WHERE email=?")
-      .get(data.email) as { id: string; password: string } | undefined;
+      .get(data.email)) as { id: string; password: string } | undefined;
     const valid = await passwordMatches(
       data.password,
       user?.password || "00000000000000000000000000000000:" + "00".repeat(64),
     );
     if (!user || !valid)
       throw new HttpError(401, "E-mail ou senha incorretos.");
-    await createSession(user.id);
+    await transaction(async () => {
+      const current = (await connection
+        .prepare("SELECT password FROM users WHERE id=? FOR UPDATE")
+        .get(user.id)) as { password: string } | undefined;
+      if (!current || current.password !== user.password)
+        throw new HttpError(401, "A senha foi alterada. Entre novamente.");
+      await createSession(user.id);
+    });
     return json({ ok: true });
   } catch (e) {
     return failure(e);

@@ -24,11 +24,11 @@ export async function currentUser(): Promise<User | null> {
   const token = (await cookies()).get("coelho-session")?.value;
   if (!token) return null;
   return (
-    (db()
+    ((await db()
       .prepare(
-        "SELECT u.id,u.name,u.email,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>?",
+        "SELECT u.id,u.name,u.email,u.role,u.avatar FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>?",
       )
-      .get(hash(token), Date.now()) as User) || null
+      .get(hash(token), Date.now())) as User) || null
   );
 }
 export async function requireUser() {
@@ -39,8 +39,8 @@ export async function requireUser() {
 export async function createSession(userId: string) {
   const token = randomBytes(32).toString("hex");
   const maxAge = 60 * 60 * 24 * 7;
-  db().prepare("DELETE FROM sessions WHERE expires < ?").run(Date.now());
-  db()
+  await db().prepare("DELETE FROM sessions WHERE expires < ?").run(Date.now());
+  await db()
     .prepare("INSERT INTO sessions(token,user_id,expires) VALUES(?,?,?)")
     .run(hash(token), userId, Date.now() + maxAge * 1000);
   (await cookies()).set("coelho-session", token, {
@@ -55,6 +55,6 @@ export async function logout() {
   const jar = await cookies();
   const token = jar.get("coelho-session")?.value;
   if (token)
-    db().prepare("DELETE FROM sessions WHERE token=?").run(hash(token));
+    await db().prepare("DELETE FROM sessions WHERE token=?").run(hash(token));
   jar.delete("coelho-session");
 }

@@ -14,19 +14,32 @@
     "format": "prettier --write src tests scripts next.config.ts",
     "verify": "npm run lint && npm run typecheck && npm test",
     "prepare": "husky",
-    "backup": "node scripts/backup.mjs"
+    "backup": "node scripts/backup.mjs",
+    "set-mentor": "node --env-file-if-exists=.env.local scripts/set-mentor.mjs",
+    "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate-postgres.mjs",
+    "db:import": "node --env-file-if-exists=.env.local scripts/import-sqlite.mjs",
+    "test:postgres": "node scripts/test-postgres.mjs",
+    "backup:postgres": "node --env-file-if-exists=.env.local scripts/backup-postgres.mjs",
+    "db:check": "node --env-file-if-exists=.env.local scripts/check-postgres.mjs"
   },
   "dependencies": {
+    "@radix-ui/react-progress": "^1.1.16",
+    "clsx": "^2.1.1",
     "lucide-react": "^1.41.0",
     "next": "16.3.4",
+    "pg": "^8.23.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "tailwind-merge": "^3.6.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^22.20.1",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

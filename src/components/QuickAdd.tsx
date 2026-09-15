@@ -9,7 +9,7 @@ import {
   ArrowLeft,
   Check,
 } from "lucide-react";
-import { localDate, type StudyItem } from "@/lib/study-items";
+import { localDate, type StudyItem } from "@/lib/domain";
 
 import { useStudy } from "./StudyProvider";
 
@@ -22,20 +22,46 @@ function QuickAddContent() {
   const [busy, setBusy] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const [formSession, setFormSession] = useState(0);
   const form = useRef<HTMLFormElement>(null);
   const [kind, setKind] = useState<"habit" | "task" | null>(
     editing?.kind || null,
   );
   const [measure, setMeasure] = useState(editing?.measure || "check");
+  const [creationDate, setCreationDate] = useState(localDate());
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   useEffect(() => {
     if (kind) form.current?.querySelector<HTMLInputElement>("input")?.focus();
   }, [kind]);
   useEffect(() => {
-    if (editing) dialog.current?.showModal();
+    if (editing) {
+      returnFocus.current = document.activeElement as HTMLElement;
+      dialog.current?.showModal();
+    }
   }, [editing]);
+  useEffect(() => {
+    function requested(event: Event) {
+      const detail = (
+        event as CustomEvent<{ kind?: "habit" | "task"; date?: string }>
+      ).detail;
+      returnFocus.current = document.activeElement as HTMLElement;
+      setFormSession((n) => n + 1);
+      setKind(detail?.kind || null);
+      setCreationDate(detail?.date || localDate());
+      setError("");
+      setSaved("");
+      setMeasure("check");
+      dialog.current?.showModal();
+    }
+    window.addEventListener("coelho:add", requested);
+    return () => window.removeEventListener("coelho:add", requested);
+  }, []);
   function open() {
+    returnFocus.current = trigger.current;
+    setFormSession((n) => n + 1);
+    setCreationDate(localDate());
     setKind(null);
     setError("");
     setSaved("");
@@ -71,7 +97,7 @@ function QuickAddContent() {
       target,
       unit: String(data.get("unit") || "").trim(),
       value: 0,
-      date: String(data.get("date") || editing?.date || localDate()),
+      date: String(data.get("date") || editing?.date || creationDate),
       time: String(data.get("time") || ""),
       priority: String(data.get("priority") || "Normal"),
       done: false,
@@ -119,7 +145,8 @@ function QuickAddContent() {
         aria-labelledby="quick-add-title"
         onClose={() => {
           setEditing(null);
-          trigger.current?.focus();
+          if (returnFocus.current?.isConnected) returnFocus.current.focus();
+          else trigger.current?.focus();
         }}
         onClick={(event) => {
           if (event.target === dialog.current) {
@@ -189,7 +216,7 @@ function QuickAddContent() {
           </div>
         ) : (
           <form
-            key={editing?.id || "new"}
+            key={`${editing?.id || "new"}-${formSession}`}
             ref={form}
             onSubmit={submit}
             className="quick-add-form"
@@ -287,7 +314,7 @@ function QuickAddContent() {
                     name="date"
                     type="date"
                     required
-                    defaultValue={editing?.date || localDate()}
+                    defaultValue={editing?.date || creationDate}
                   />
                 </label>
                 <label>

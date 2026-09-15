@@ -31,6 +31,25 @@ export default function StudyProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<StudyItem | null>(null);
+  const [resetToken, setResetToken] = useState("");
+  useEffect(() => {
+    const readToken = () => {
+      const token = new URLSearchParams(window.location.hash.slice(1)).get(
+        "reset",
+      );
+      if (token && /^[a-f0-9]{64}$/.test(token)) {
+        setResetToken(token);
+        window.history.replaceState(
+          null,
+          "",
+          window.location.pathname + window.location.search,
+        );
+      }
+    };
+    readToken();
+    window.addEventListener("hashchange", readToken);
+    return () => window.removeEventListener("hashchange", readToken);
+  }, []);
   const refresh = useCallback(async () => {
     if (writing.current) return;
     const version = ++epoch.current;
@@ -115,6 +134,18 @@ export default function StudyProvider({ children }: { children: ReactNode }) {
       writing.current = false;
     }
   }
+  if (resetToken)
+    return (
+      <AuthForm
+        onSuccess={refresh}
+        connectionError=""
+        resetToken={resetToken}
+        onRecoveryClose={() => {
+          setResetToken("");
+          void refresh();
+        }}
+      />
+    );
   if (loading)
     return (
       <main className="auth-screen">

@@ -1,7 +1,16 @@
+import { networkInterfaces } from "node:os";
 import type { NextConfig } from "next";
+
+// Permite abrir o dev server pelo celular na mesma rede sem fixar um IP,
+// que muda a cada renovação de DHCP.
+const localAddresses = Object.values(networkInterfaces())
+  .flat()
+  .filter((i) => i && i.family === "IPv4" && !i.internal)
+  .map((i) => i!.address);
 const nextConfig: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["node:sqlite"],
+  serverExternalPackages: ["node:sqlite", "pg"],
+  allowedDevOrigins: localAddresses,
   async headers() {
     return [
       {

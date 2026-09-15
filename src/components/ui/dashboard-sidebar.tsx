@@ -9,8 +9,10 @@ import {
   Home,
   ListChecks,
   NotebookPen,
+  ClipboardList,
   CalendarDays,
   User,
+  Users,
   ChevronDown,
   ChevronRight,
   PanelLeftClose,
@@ -18,9 +20,17 @@ import {
   X,
   ArrowUpRight,
   GraduationCap,
+  type LucideIcon,
 } from "lucide-react";
 
-const destinations = [
+type Destination = {
+  href: string;
+  title: string;
+  icon: LucideIcon;
+  description: string;
+};
+
+const destinations: Destination[] = [
   {
     href: "/",
     title: "Início",
@@ -36,7 +46,7 @@ const destinations = [
   {
     href: "/planos",
     title: "Planos",
-    icon: NotebookPen,
+    icon: ClipboardList,
     description: "Planejamento de estudos",
   },
   {
@@ -46,6 +56,12 @@ const destinations = [
     description: "Agenda e provas",
   },
   {
+    href: "/questoes",
+    title: "Banco de questões",
+    icon: NotebookPen,
+    description: "Registros e desempenho",
+  },
+  {
     href: "/perfil",
     title: "Perfil",
     icon: User,
@@ -53,7 +69,15 @@ const destinations = [
   },
 ];
 
+const mentorDestination: Destination = {
+  href: "/mentoria",
+  title: "Espaço do mentor",
+  icon: Users,
+  description: "Alunos e desempenho diário",
+};
+
 import { useStudy } from "../StudyProvider";
+import Avatar from "./Avatar";
 
 export default function DashboardSidebar() {
   const { data } = useStudy();
@@ -63,18 +87,20 @@ export default function DashboardSidebar() {
   const dialog = useRef<HTMLDialogElement>(null);
   const searchButton = useRef<HTMLButtonElement>(null);
   const workspace = useRef<HTMLDetailsElement>(null);
-  const current = destinations.find((item) => item.href === pathname);
+  const searchable =
+    data.user.role === "mentor" ? [...destinations, mentorDestination] : destinations;
+  const current = searchable.find((item) => item.href === pathname);
   const normalize = (value: string) =>
     value
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase();
-  const results = destinations.filter((item) =>
+  const results = searchable.filter((item) =>
     normalize(`${item.title} ${item.description}`).includes(normalize(query)),
   );
 
   useEffect(() => {
-    const desktop = window.matchMedia("(min-width: 1100px)");
+    const desktop = window.matchMedia("(min-width: 1024px)");
     function keydown(event: KeyboardEvent) {
       if (
         desktop.matches &&
@@ -168,12 +194,18 @@ export default function DashboardSidebar() {
           </div>
           <div className="desktop-nav-group">
             <p>ORGANIZAR & ESTUDAR</p>
-            {destinations.slice(1, 4).map(navLink)}
+            {destinations.slice(1, 5).map(navLink)}
           </div>
           <div className="desktop-nav-group">
             <p>MINHA EVOLUÇÃO</p>
-            {navLink(destinations[4])}
+            {navLink(destinations[5])}
           </div>
+          {data.user.role === "mentor" && (
+            <div className="desktop-nav-group">
+              <p>MENTORIA</p>
+              {navLink(mentorDestination)}
+            </div>
+          )}
         </nav>
         <div className="desktop-sidebar-footer">
           <div className="desktop-workspace-note">
@@ -183,13 +215,7 @@ export default function DashboardSidebar() {
             </span>
           </div>
           <Link href="/perfil" className="desktop-user">
-            <span className="avatar">
-              {data.user.name
-                .split(" ")
-                .map((n) => n[0])
-                .slice(0, 2)
-                .join("")}
-            </span>
+            <Avatar user={data.user} />
             <span>
               <strong>{data.user.name}</strong>
               <small>Minha conta</small>
@@ -222,7 +248,7 @@ export default function DashboardSidebar() {
         className="desktop-search-dialog"
         aria-labelledby="desktop-search-title"
         onClose={() => {
-          if (window.matchMedia("(min-width: 1100px)").matches)
+          if (window.matchMedia("(min-width: 1024px)").matches)
             searchButton.current?.focus();
         }}
         onClick={(event) => {

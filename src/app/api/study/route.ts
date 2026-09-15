@@ -5,7 +5,7 @@ import { mutation } from "@/server/validation";
 export const runtime = "nodejs";
 export async function GET() {
   try {
-    return json(state(await requireUser()));
+    return json(await state(await requireUser()));
   } catch (e) {
     return failure(e);
   }
@@ -13,12 +13,16 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
-    limit("write:" + user.id, 120);
+    await limit("write:" + user.id, 120);
     const data = mutation.parse(await body(request));
-    mutate(user, data);
-    return json(
-      state(data.action === "profile" ? { ...user, name: data.name } : user),
-    );
+    await mutate(user, data);
+    const updated =
+      data.action === "profile"
+        ? { ...user, name: data.name }
+        : data.action === "update-avatar"
+          ? { ...user, avatar: data.avatar }
+          : user;
+    return json(await state(updated));
   } catch (e) {
     return failure(e);
   }
