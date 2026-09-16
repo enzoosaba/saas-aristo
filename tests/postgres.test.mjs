@@ -229,3 +229,194 @@ test("Fase 1 backfill enrolls every Tenant 01 member into Turma Inicial", async 
     await db.close();
   }
 });
+
+test("Fase 3B authorization functions compute correctly, without recursion", async () => {
+  const db = new PGlite();
+  try {
+    for (const file of readdirSync("supabase/migrations").sort())
+      await db.exec(readFileSync(`supabase/migrations/${file}`, "utf8"));
+
+    // Run a query as a given actor, inside its own transaction — mirrors
+    // exactly what src/server/database.ts does (SET LOCAL via
+    // set_config(..., true), never a session-level SET).
+    async function asActor(userId, sql, params = []) {
+      await db.exec("BEGIN");
+      try {
+        await db.query("SELECT set_config('app.user_id', $1, true)", [
+          userId ?? "",
+        ]);
+        const result = await db.query(sql, params);
+        await db.exec("COMMIT");
+        return result.rows[0];
+      } catch (e) {
+        await db.exec("ROLLBACK");
+        throw e;
+      }
+    }
+
+    const [{ id: tenantAId }] = (
+      await db.query("SELECT id FROM aristo.tenants WHERE slug='mentoria-coelho'")
+    ).rows;
+    const [{ id: orgAId }] = (
+      await db.query(
+        "SELECT id FROM aristo.organizations WHERE tenant_id=$1 AND name='Turma Inicial'",
+        [tenantAId],
+      )
+    ).rows;
+
+    // A second, independent tenant — not used for RLS policy isolation yet
+    // (no policies exist on the tables in this migration), only to prove
+    // the functions themselves distinguish tenants correctly.
+    const [{ id: tenantBId }] = (
+      await db.query(
+        "INSERT INTO aristo.tenants(name,slug) VALUES('Tenant B','tenant-b') RETURNING id",
+      )
+    ).rows;
+    const [{ id: orgBId }] = (
+      await db.query(
+        "INSERT INTO aristo.organizations(tenant_id,name) VALUES($1,'Turma B') RETURNING id",
+        [tenantBId],
+      )
+    ).rows;
+
+    await db.exec(`
+      INSERT INTO aristo.users (id,name,email,password,role,created_at) VALUES
+        ('platform-admin','Admin','admin@example.test','x','student',0),
+        ('tenant-admin-a','TAdminA','tadmina@example.test','x','student',0),
+        ('mentor-a','MentorA','mentora@example.test','x','mentor',0),
+        ('student-a1','StudentA1','a1@example.test','x','student',0),
+        ('student-a2','StudentA2','a2@example.test','x','student',0),
+        ('mentor-b','MentorB','mentorb@example.test','x','mentor',0);
+    `);
+    await db.query(
+      "INSERT INTO aristo.platform_admins(user_id) VALUES ('platform-admin')",
+    );
+    await db.query(
+      "INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES ($1,'tenant-admin-a','TENANT_ADMIN')",
+      [tenantAId],
+    );
+    for (const [userId, role] of [
+      ["mentor-a", "MENTOR"],
+      ["student-a1", "STUDENT"],
+      ["student-a2", "STUDENT"],
+    ]) {
+      await db.query(
+        "INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES ($1,$2,$3)",
+        [tenantAId, userId, role],
+      );
+      await db.query(
+        "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role) VALUES ($1,$2,$3,$4)",
+        [tenantAId, orgAId, userId, role],
+      );
+    }
+    await db.query(
+      "INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES ($1,'mentor-b','MENTOR')",
+      [tenantBId],
+    );
+    await db.query(
+      "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role) VALUES ($1,$2,'mentor-b','MENTOR')",
+      [tenantBId, orgBId],
+    );
+    await db.query(
+      "INSERT INTO aristo.mentor_students(mentor_id,student_id) VALUES ('mentor-a','student-a1')",
+    );
+
+    // is_platform_admin: no recursion (platform_admins' own policy would be
+    // "self row" once it exists — this function doesn't need SECURITY
+    // DEFINER at all, see the migration comment).
+    assert.equal(
+      (await asActor("platform-admin", "SELECT aristo.is_platform_admin() AS v")).v,
+      true,
+    );
+    assert.equal(
+      (await asActor("mentor-a", "SELECT aristo.is_platform_admin() AS v")).v,
+      false,
+    );
+
+    // is_tenant_admin / can_manage_tenant: correctly scoped per tenant, no
+    // "stack depth limit exceeded" from the SECURITY DEFINER functions
+    // querying tenant_members from inside a tenant_members-derived check.
+    assert.equal(
+      (await asActor("tenant-admin-a", "SELECT aristo.is_tenant_admin($1) AS v", [tenantAId])).v,
+      true,
+    );
+    assert.equal(
+      (await asActor("tenant-admin-a", "SELECT aristo.is_tenant_admin($1) AS v", [tenantBId])).v,
+      false,
+      "admin do Tenant A não deve administrar o Tenant B",
+    );
+    assert.equal(
+      (await asActor("mentor-a", "SELECT aristo.can_manage_tenant($1) AS v", [tenantAId])).v,
+      false,
+      "mentor não administra o tenant, só a própria organização",
+    );
+
+    // is_organization_mentor / can_manage_organization
+    assert.equal(
+      (await asActor("mentor-a", "SELECT aristo.is_organization_mentor($1) AS v", [orgAId])).v,
+      true,
+    );
+    assert.equal(
+      (await asActor("mentor-a", "SELECT aristo.is_organization_mentor($1) AS v", [orgBId])).v,
+      false,
+      "mentor do Tenant A não é mentor da organização do Tenant B",
+    );
+    assert.equal(
+      (await asActor("mentor-b", "SELECT aristo.can_manage_organization($1) AS v", [orgAId])).v,
+      false,
+    );
+
+    // can_access_student: self, linked mentor, unrelated mentor, cross-tenant admin.
+    assert.equal(
+      (await asActor("student-a1", "SELECT aristo.can_access_student($1,$2) AS v", ["student-a1", orgAId])).v,
+      true,
+      "sempre pode acessar os próprios dados",
+    );
+    assert.equal(
+      (await asActor("mentor-a", "SELECT aristo.can_access_student($1,$2) AS v", ["student-a1", orgAId])).v,
+      true,
+      "mentor-a tem vínculo mentor_students com student-a1",
+    );
+    assert.equal(
+      (await asActor("mentor-a", "SELECT aristo.can_access_student($1,$2) AS v", ["student-a2", orgAId])).v,
+      false,
+      "mentor-a não tem vínculo com student-a2",
+    );
+    assert.equal(
+      (await asActor("mentor-b", "SELECT aristo.can_access_student($1,$2) AS v", ["student-a1", orgAId])).v,
+      false,
+      "mentor de outro tenant não acessa aluno do Tenant A",
+    );
+    assert.equal(
+      (await asActor("tenant-admin-a", "SELECT aristo.can_access_student($1,$2) AS v", ["student-a1", orgAId])).v,
+      true,
+      "admin do próprio tenant acessa qualquer aluno dele",
+    );
+    assert.equal(
+      (await asActor("platform-admin", "SELECT aristo.can_access_student($1,$2) AS v", ["student-a1", orgAId])).v,
+      true,
+    );
+
+    // find_user_by_email / verify_login_credential: work with NO actor set
+    // at all (actor = null) — this is the whole point of these two
+    // functions, see the migration comment.
+    await db.exec("BEGIN");
+    await db.query("SELECT set_config('app.user_id', '', true)");
+    const found = (
+      await db.query("SELECT * FROM aristo.find_user_by_email($1)", [
+        "a1@example.test",
+      ])
+    ).rows[0];
+    assert.deepEqual(found, { id: "student-a1", role: "student" });
+    const credential = (
+      await db.query("SELECT * FROM aristo.verify_login_credential($1)", [
+        "mentora@example.test",
+      ])
+    ).rows[0];
+    assert.equal(credential.id, "mentor-a");
+    assert.equal(credential.password, "x");
+    await db.exec("COMMIT");
+  } finally {
+    await db.close();
+  }
+});
