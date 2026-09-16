@@ -1120,7 +1120,7 @@ test("Fase 3B RLS batch 3: plans enforces isolation as aristo_app", async () => 
   // plans has no standalone id column — PRIMARY KEY(user_id, date).
   const db = new PGlite();
   try {
-    const { tenantAId, orgAId, tenantBId, orgBId, asActor, asOwner } =
+    const { tenantAId, orgAId, asActor, asOwner } =
       await buildTwoTenantFixture(db);
     const planDate = "2026-01-01";
 
@@ -1188,7 +1188,7 @@ test("Fase 3B RLS batch 3: records enforces isolation as aristo_app", async () =
   // items(user_id, id) — needs an owning item to exist first.
   const db = new PGlite();
   try {
-    const { tenantAId, orgAId, tenantBId, orgBId, asActor, asOwner } =
+    const { tenantAId, orgAId, asActor, asOwner } =
       await buildTwoTenantFixture(db);
     const date = "2026-01-01";
 
