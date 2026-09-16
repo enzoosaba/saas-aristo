@@ -1481,3 +1481,268 @@ test("Fase 3B RLS batch 4: organization_members enforces isolation, self-promoti
     await db.close();
   }
 });
+
+test("Fase 3B RLS batch 5: users enforces self-only visibility/writability, role/email are column-locked", async () => {
+  const db = new PGlite();
+  try {
+    const { asActor, asOwner } = await buildTwoTenantFixture(db);
+
+    // --- SELECT: self and platform admin only. A colleague under the same
+    // mentor (mentor-a/student-a) still cannot see another user's row
+    // directly — that visibility is only ever granted through the narrow
+    // functions below, never through the users table itself.
+    assert.equal(
+      (await asActor("student-a", "SELECT 1 FROM aristo.users WHERE id='student-a'")).rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("platform-admin", "SELECT 1 FROM aristo.users WHERE id='student-a'")).rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("mentor-a", "SELECT password FROM aristo.users WHERE id='student-a'")).rows.length,
+      0,
+      "mentor-a não pode ler a linha de student-a diretamente, nem sequer a coluna password",
+    );
+    assert.equal(
+      (await asActor("student-b", "SELECT 1 FROM aristo.users WHERE id='student-a'")).rows.length,
+      0,
+    );
+
+    // --- INSERT: self only (registration's own pattern) or platform admin.
+    await asActor(
+      "fresh-user",
+      "INSERT INTO aristo.users(id,name,email,password,role,created_at) VALUES('fresh-user','Fresh','fresh-user@example.test','x','student',0)",
+    );
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.users WHERE id='fresh-user'")).rows.length,
+      1,
+    );
+    await assert.rejects(
+      asActor(
+        "mentor-a",
+        "INSERT INTO aristo.users(id,name,email,password,role,created_at) VALUES('another-user','Another','another@example.test','x','student',0)",
+      ),
+      /row-level security/i,
+      "mentor-a não pode inserir uma linha de users em nome de outro id",
+    );
+
+    // --- UPDATE column grant: name/avatar/password are the only columns
+    // aristo_app was ever granted UPDATE on — role/email are refused
+    // outright, before RLS is even consulted, regardless of who's asking
+    // (including platform admin, which never got the column grant either).
+    await asActor("student-a", "UPDATE aristo.users SET name='Nova Sofia' WHERE id='student-a'");
+    assert.equal(
+      (await asOwner("SELECT name FROM aristo.users WHERE id='student-a'")).rows[0].name,
+      "Nova Sofia",
+    );
+    await assert.rejects(
+      asActor("student-a", "UPDATE aristo.users SET role='mentor' WHERE id='student-a'"),
+      /permission denied/i,
+      "auto-alteração de role deve ser recusada pelo GRANT por coluna, não pela RLS",
+    );
+    await assert.rejects(
+      asActor("student-a", "UPDATE aristo.users SET email='new@example.test' WHERE id='student-a'"),
+      /permission denied/i,
+    );
+    await assert.rejects(
+      asActor("platform-admin", "UPDATE aristo.users SET role='mentor' WHERE id='student-a'"),
+      /permission denied/i,
+      "nem platform_admin tem o GRANT de role/email via aristo_app — precisa da conexão postgres",
+    );
+
+    // --- UPDATE row scope: only self or platform admin, never another
+    // user, even for the granted columns.
+    assert.equal(
+      (
+        await asActor("mentor-a", "UPDATE aristo.users SET name='Hackeado' WHERE id='student-a'")
+      ).rowCount,
+      0,
+      "mentor-a não pode alterar o nome de student-a",
+    );
+    await asActor("platform-admin", "UPDATE aristo.users SET avatar='novo.png' WHERE id='student-a'");
+    assert.equal(
+      (await asOwner("SELECT avatar FROM aristo.users WHERE id='student-a'")).rows[0].avatar,
+      "novo.png",
+    );
+
+    // --- DELETE: platform admin only.
+    assert.equal(
+      (await asActor("student-a", "DELETE FROM aristo.users WHERE id='student-a'")).rowCount,
+      0,
+      "ninguém se autoexclui",
+    );
+    await asActor("platform-admin", "DELETE FROM aristo.users WHERE id='fresh-user'");
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.users WHERE id='fresh-user'")).rows.length,
+      0,
+    );
+
+    assert.equal((await asActor(null, "SELECT * FROM aristo.users")).rows.length, 0);
+  } finally {
+    await db.close();
+  }
+});
+
+test("Fase 3B RLS batch 5: resolve_session_user resolves a valid session without an actor, and only that", async () => {
+  const db = new PGlite();
+  try {
+    const { asActor, asOwner } = await buildTwoTenantFixture(db);
+    const now = Date.now();
+    await asOwner(
+      "INSERT INTO aristo.sessions(token,user_id,expires) VALUES('hashed-token-a','student-a',$1)",
+      [now + 1_000_000],
+    );
+    await asOwner(
+      "INSERT INTO aristo.sessions(token,user_id,expires) VALUES('hashed-token-expired','student-a',$1)",
+      [now - 1_000],
+    );
+
+    // No actor context at all (this is the whole point — login/session
+    // resolution happens *before* an actor exists) still resolves the
+    // session, because the function's security comes from the exact token
+    // match, not from current_user_id().
+    const resolved = await asActor(
+      null,
+      "SELECT * FROM aristo.resolve_session_user($1,$2)",
+      ["hashed-token-a", now],
+    );
+    assert.equal(resolved.rows.length, 1);
+    assert.equal(resolved.rows[0].id, "student-a");
+    assert.equal(resolved.rows[0].name, "StudentA");
+    assert.equal("password" in resolved.rows[0], false, "a função nunca retorna a coluna password");
+
+    // Expired session: no row, no error.
+    assert.equal(
+      (
+        await asActor(null, "SELECT * FROM aristo.resolve_session_user($1,$2)", [
+          "hashed-token-expired",
+          now,
+        ])
+      ).rows.length,
+      0,
+    );
+    // Wrong token: no row, no error.
+    assert.equal(
+      (
+        await asActor(null, "SELECT * FROM aristo.resolve_session_user($1,$2)", [
+          "no-such-token",
+          now,
+        ])
+      ).rows.length,
+      0,
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("Fase 3B RLS batch 5: get_mentor_roster and get_linked_student never expose password, and only to the mentor themselves", async () => {
+  const db = new PGlite();
+  try {
+    const { asActor } = await buildTwoTenantFixture(db);
+
+    // mentor-a's roster is exactly student-a (the fixture's mentor_students
+    // link), never anything from Tenant B.
+    const roster = await asActor(
+      "mentor-a",
+      "SELECT * FROM aristo.get_mentor_roster($1)",
+      ["mentor-a"],
+    );
+    assert.deepEqual(
+      roster.rows.map((r) => r.id),
+      ["student-a"],
+    );
+    assert.equal("password" in roster.rows[0], false);
+
+    // Passing someone else's id as p_mentor_id doesn't work — the function
+    // checks it against current_user_id() itself, regardless of what the
+    // caller passes in.
+    assert.equal(
+      (await asActor("mentor-b", "SELECT * FROM aristo.get_mentor_roster($1)", ["mentor-a"])).rows
+        .length,
+      0,
+      "mentor-b não pode ler o roster de mentor-a passando o id de outra pessoa",
+    );
+    assert.equal(
+      (await asActor(null, "SELECT * FROM aristo.get_mentor_roster($1)", ["mentor-a"])).rows.length,
+      0,
+      "sem contexto de ator, a função não retorna nada",
+    );
+
+    // get_linked_student: mentor-a and student-a are linked.
+    const linked = await asActor(
+      "mentor-a",
+      "SELECT * FROM aristo.get_linked_student($1,$2)",
+      ["mentor-a", "student-a"],
+    );
+    assert.equal(linked.rows.length, 1);
+    assert.equal(linked.rows[0].name, "StudentA");
+    assert.equal("password" in linked.rows[0], false);
+
+    // mentor-a and student-b are not linked.
+    assert.equal(
+      (
+        await asActor("mentor-a", "SELECT * FROM aristo.get_linked_student($1,$2)", [
+          "mentor-a",
+          "student-b",
+        ])
+      ).rows.length,
+      0,
+      "mentor-a não tem vínculo mentor_students com student-b",
+    );
+    // mentor-b impersonating mentor-a (passing mentor-a's id as
+    // p_mentor_id while actually being mentor-b) does not work either.
+    assert.equal(
+      (
+        await asActor("mentor-b", "SELECT * FROM aristo.get_linked_student($1,$2)", [
+          "mentor-a",
+          "student-a",
+        ])
+      ).rows.length,
+      0,
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("Fase 3B RLS batch 5: get_mentor_ranking returns only id/name/xp for siblings under the same mentor", async () => {
+  const db = new PGlite();
+  try {
+    const { asActor } = await buildTwoTenantFixture(db);
+
+    // student-a's ranking includes themselves (they share mentor-a with
+    // themselves, trivially) and never a Tenant B student.
+    const ranking = await asActor(
+      "student-a",
+      "SELECT * FROM aristo.get_mentor_ranking($1)",
+      ["student-a"],
+    );
+    assert.deepEqual(
+      ranking.rows.map((r) => r.id),
+      ["student-a"],
+    );
+    assert.equal(Number(ranking.rows[0].xp), 0);
+    assert.equal("password" in ranking.rows[0], false);
+    assert.equal("email" in ranking.rows[0], false);
+
+    // requesting_user_id must match current_user_id(): mentor-a cannot
+    // fetch student-a's ranking by passing student-a's id while acting as
+    // themselves.
+    assert.equal(
+      (
+        await asActor("mentor-a", "SELECT * FROM aristo.get_mentor_ranking($1)", ["student-a"])
+      ).rows.length,
+      0,
+    );
+    // No actor context: empty, no error.
+    assert.equal(
+      (await asActor(null, "SELECT * FROM aristo.get_mentor_ranking($1)", ["student-a"])).rows
+        .length,
+      0,
+    );
+  } finally {
+    await db.close();
+  }
+});

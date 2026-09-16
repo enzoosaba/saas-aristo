@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { randomBytes, scrypt, timingSafeEqual, createHash } from "node:crypto";
 import { promisify } from "node:util";
-import { db, setActor } from "./db";
+import { db, isPostgres, setActor } from "./db";
 import { HttpError } from "./http";
 import type { User } from "@/lib/domain";
 const derive = promisify(scrypt);
@@ -23,16 +23,24 @@ export async function passwordMatches(password: string, stored: string) {
 export async function currentUser(): Promise<User | null> {
   const token = (await cookies()).get("aristo-session")?.value;
   if (!token) return null;
-  // Fase 3B: this lookup itself necessarily runs with no actor established
-  // yet (that's what it's for) — sessions/users' RLS policies allow it by
-  // token/self-lookup, not by identity. Every query after this one in the
-  // same request runs as the resolved user, once found.
+  // Fase 3B part 5, batch 5: this lookup itself necessarily runs with no
+  // actor established yet (that's what it's for) — routed through
+  // aristo.resolve_session_user() under Postgres, a narrow SECURITY
+  // DEFINER function keyed by the exact hashed token, since a self-only
+  // users RLS policy can't apply before the actor it would check against
+  // is even known. SQLite keeps the original direct join (no RLS to route
+  // around). Every query after this one in the same request runs as the
+  // resolved user, once found.
   const user =
-    ((await db()
-      .prepare(
-        "SELECT u.id,u.name,u.email,u.role,u.avatar FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>?",
-      )
-      .get(hash(token), Date.now())) as User) || null;
+    ((isPostgres()
+      ? await db()
+          .prepare("SELECT * FROM aristo.resolve_session_user(?,?)")
+          .get(hash(token), Date.now())
+      : await db()
+          .prepare(
+            "SELECT u.id,u.name,u.email,u.role,u.avatar FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>?",
+          )
+          .get(hash(token), Date.now())) as User) || null;
   if (user) setActor(user.id);
   return user;
 }

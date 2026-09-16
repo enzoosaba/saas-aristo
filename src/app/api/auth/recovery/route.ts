@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { db, isPostgres, transaction } from "@/server/db";
+import { db, isPostgres, setActor, transaction } from "@/server/db";
 import { body, failure, HttpError, json, limit } from "@/server/http";
 import { passwordHash, logout } from "@/server/auth";
 
@@ -102,6 +102,15 @@ export async function POST(request: Request) {
         400,
         "Link inválido ou expirado. Solicite um novo e-mail.",
       );
+    // Fase 3B part 5, batch 5: this whole flow is anonymous — gated only
+    // by possession of a valid reset token, never a session — so no actor
+    // was ever set for this request. Without this, the self-only users
+    // UPDATE policy below would silently affect 0 rows once aristo_app is
+    // the connecting role (RLS refusing the row, not an error), while this
+    // handler would still report success. row.user_id is safe to trust as
+    // the actor here precisely because it came from a token that was just
+    // validated against password_resets above.
+    setActor(row.user_id);
     const password = await passwordHash(input.password);
     await transaction(async () => {
       await db()

@@ -75,11 +75,23 @@ export async function state(user: User): Promise<StudyState> {
     demo: !!(await connection
       .prepare("SELECT user_id FROM demo_batches WHERE user_id=?")
       .get(user.id)),
-    ranking: (await connection
-      .prepare(
-        `SELECT u.id,u.name,COALESCE((SELECT COUNT(*)*20 FROM records r WHERE r.user_id=u.id AND r.done=1),0) AS xp FROM users u WHERE u.id IN (SELECT ms.student_id FROM mentor_students ms WHERE ms.mentor_id IN (SELECT mentor_id FROM mentor_students WHERE student_id=?)) ORDER BY xp DESC,u.name,u.id`,
-      )
-      .all(user.id)) as StudyState["ranking"],
+    // Fase 3B part 5, batch 5: routed through aristo.get_mentor_ranking()
+    // under Postgres, a narrow SECURITY DEFINER function returning only
+    // (id, name, xp) — a users SELECT policy broad enough to cover
+    // "sibling under the same mentor" directly would expose password to
+    // every student in that mentor's roster. SQLite keeps the original
+    // direct query (no RLS to route around).
+    ranking: (
+      isPostgres()
+        ? await connection
+            .prepare("SELECT * FROM aristo.get_mentor_ranking(?)")
+            .all(user.id)
+        : await connection
+            .prepare(
+              `SELECT u.id,u.name,COALESCE((SELECT COUNT(*)*20 FROM records r WHERE r.user_id=u.id AND r.done=1),0) AS xp FROM users u WHERE u.id IN (SELECT ms.student_id FROM mentor_students ms WHERE ms.mentor_id IN (SELECT mentor_id FROM mentor_students WHERE student_id=?)) ORDER BY xp DESC,u.name,u.id`,
+            )
+            .all(user.id)
+    ) as StudyState["ranking"],
 
     questions: (
       (await connection

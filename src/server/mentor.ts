@@ -12,11 +12,19 @@ import {
 } from "@/lib/domain";
 
 export async function roster(mentorId: string): Promise<MentorStudent[]> {
-  return (await db()
-    .prepare(
-      "SELECT u.id,u.name,u.email,u.avatar FROM mentor_students ms JOIN users u ON u.id=ms.student_id WHERE ms.mentor_id=? ORDER BY u.name",
-    )
-    .all(mentorId)) as MentorStudent[];
+  // Fase 3B part 5, batch 5: routed through aristo.get_mentor_roster()
+  // under Postgres — a users SELECT policy broad enough to cover "a
+  // linked student" would expose password to every mentor with at least
+  // one student. SQLite keeps the original direct join.
+  return (
+    isPostgres()
+      ? await db().prepare("SELECT * FROM aristo.get_mentor_roster(?)").all(mentorId)
+      : await db()
+          .prepare(
+            "SELECT u.id,u.name,u.email,u.avatar FROM mentor_students ms JOIN users u ON u.id=ms.student_id WHERE ms.mentor_id=? ORDER BY u.name",
+          )
+          .all(mentorId)
+  ) as MentorStudent[];
 }
 
 export async function dailySummary(
@@ -31,9 +39,18 @@ export async function dailySummary(
     .get(mentorId, studentId);
   if (!linked) throw new HttpError(404, "Aluno não encontrado na sua lista.");
 
-  const student = (await connection
-    .prepare("SELECT id,name,email,avatar FROM users WHERE id=?")
-    .get(studentId)) as MentorStudent;
+  // Fase 3B part 5, batch 5: routed through aristo.get_linked_student()
+  // under Postgres, same reason as roster() above. SQLite keeps the
+  // original direct lookup.
+  const student = (
+    isPostgres()
+      ? await connection
+          .prepare("SELECT * FROM aristo.get_linked_student(?,?)")
+          .get(mentorId, studentId)
+      : await connection
+          .prepare("SELECT id,name,email,avatar FROM users WHERE id=?")
+          .get(studentId)
+  ) as MentorStudent;
 
   const items = (
     (await connection
