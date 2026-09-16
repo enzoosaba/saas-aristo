@@ -909,3 +909,342 @@ test("Fase 3B RLS batch 2: tenant_settings and organizations enforce isolation a
     await db.close();
   }
 });
+
+// Fase 3B part 5, batch 3: shared fixture builder for items/records/plans/
+// questions/study_sessions' isolation tests. Each of the 5 tests below
+// calls this with its *own* fresh PGlite instance — the setup code is
+// shared to avoid five copies of the same boilerplate, but no database
+// state is shared between the 5 tables' tests, exactly so a quirk unique
+// to one table can't hide behind the other four passing.
+async function buildTwoTenantFixture(db) {
+  for (const file of readdirSync("supabase/migrations").sort())
+    await db.exec(readFileSync(`supabase/migrations/${file}`, "utf8"));
+  await db.exec("GRANT aristo_app TO postgres");
+
+  const [{ id: tenantAId }] = (
+    await db.query("SELECT id FROM aristo.tenants WHERE slug='mentoria-coelho'")
+  ).rows;
+  const [{ id: orgAId }] = (
+    await db.query(
+      "SELECT id FROM aristo.organizations WHERE tenant_id=$1 AND name='Turma Inicial'",
+      [tenantAId],
+    )
+  ).rows;
+  const [{ id: tenantBId }] = (
+    await db.query(
+      "INSERT INTO aristo.tenants(name,slug) VALUES('Tenant B','tenant-b') RETURNING id",
+    )
+  ).rows;
+  const [{ id: orgBId }] = (
+    await db.query(
+      "INSERT INTO aristo.organizations(tenant_id,name) VALUES($1,'Turma B') RETURNING id",
+      [tenantBId],
+    )
+  ).rows;
+
+  await db.exec(`
+    INSERT INTO aristo.users(id,name,email,password,role,created_at) VALUES
+      ('platform-admin','Admin','admin@example.test','x','student',0),
+      ('tenant-admin-a','TAdminA','ta@example.test','x','student',0),
+      ('mentor-a','MentorA','ma@example.test','x','mentor',0),
+      ('student-a','StudentA','sa@example.test','x','student',0),
+      ('tenant-admin-b','TAdminB','tb@example.test','x','student',0),
+      ('mentor-b','MentorB','mb@example.test','x','mentor',0),
+      ('student-b','StudentB','sb@example.test','x','student',0);
+  `);
+  await db.query("INSERT INTO aristo.platform_admins(user_id) VALUES ('platform-admin')");
+  for (const [tenantId, userId, role] of [
+    [tenantAId, "tenant-admin-a", "TENANT_ADMIN"],
+    [tenantAId, "mentor-a", "MENTOR"],
+    [tenantAId, "student-a", "STUDENT"],
+    [tenantBId, "tenant-admin-b", "TENANT_ADMIN"],
+    [tenantBId, "mentor-b", "MENTOR"],
+    [tenantBId, "student-b", "STUDENT"],
+  ])
+    await db.query(
+      "INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES ($1,$2,$3)",
+      [tenantId, userId, role],
+    );
+  for (const [tenantId, orgId, userId, role] of [
+    [tenantAId, orgAId, "mentor-a", "MENTOR"],
+    [tenantAId, orgAId, "student-a", "STUDENT"],
+    [tenantBId, orgBId, "mentor-b", "MENTOR"],
+    [tenantBId, orgBId, "student-b", "STUDENT"],
+  ])
+    await db.query(
+      "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role) VALUES ($1,$2,$3,$4)",
+      [tenantId, orgId, userId, role],
+    );
+  // The SELECT case for a mentor depends on an existing mentor_students
+  // link (can_access_business_row), not just shared organization.
+  await db.query(
+    "INSERT INTO aristo.mentor_students(mentor_id,student_id) VALUES ('mentor-a','student-a')",
+  );
+  await db.query(
+    "INSERT INTO aristo.mentor_students(mentor_id,student_id) VALUES ('mentor-b','student-b')",
+  );
+
+  async function asActor(userId, sql, params = []) {
+    await db.exec("BEGIN");
+    await db.exec("SET ROLE aristo_app");
+    try {
+      await db.query("SELECT set_config('app.user_id', $1, true)", [
+        userId ?? "",
+      ]);
+      const result = await db.query(sql, params);
+      await db.exec("COMMIT");
+      return result;
+    } catch (e) {
+      await db.exec("ROLLBACK");
+      throw e;
+    } finally {
+      await db.exec("RESET ROLE");
+    }
+  }
+  const asOwner = (sql, params = []) => db.query(sql, params);
+
+  return { tenantAId, orgAId, tenantBId, orgBId, asActor, asOwner };
+}
+
+// items, questions and study_sessions share the exact same insert shape
+// (id, user_id, data, tenant_id, organization_id) — this single function
+// runs the full battery of checks against whichever one it's given.
+async function checkIdBasedBusinessTable(table) {
+  const db = new PGlite();
+  try {
+    const { tenantAId, orgAId, tenantBId, orgBId, asActor, asOwner } =
+      await buildTwoTenantFixture(db);
+
+    // student-a creates their own row.
+    await asActor(
+      "student-a",
+      `INSERT INTO aristo.${table}(id,user_id,data,tenant_id,organization_id) VALUES('row-a','student-a','{}',$1,$2)`,
+      [tenantAId, orgAId],
+    );
+    assert.equal(
+      (await asOwner(`SELECT 1 FROM aristo.${table} WHERE id='row-a'`)).rows.length,
+      1,
+      "linha deveria ter sido criada",
+    );
+
+    // self, platform admin, tenant admin (same tenant) and the linked
+    // mentor can all SELECT it; unrelated tenant B accounts cannot.
+    assert.equal(
+      (await asActor("student-a", `SELECT 1 FROM aristo.${table} WHERE id='row-a'`)).rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("mentor-a", `SELECT 1 FROM aristo.${table} WHERE id='row-a'`)).rows.length,
+      1,
+      "mentor-a tem vínculo mentor_students com student-a",
+    );
+    assert.equal(
+      (await asActor("tenant-admin-a", `SELECT 1 FROM aristo.${table} WHERE id='row-a'`)).rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("platform-admin", `SELECT 1 FROM aristo.${table} WHERE id='row-a'`)).rows.length,
+      1,
+    );
+    for (const outsider of ["mentor-b", "tenant-admin-b", "student-b"])
+      assert.equal(
+        (await asActor(outsider, `SELECT 1 FROM aristo.${table} WHERE id='row-a'`)).rows.length,
+        0,
+        `${outsider} não deve ver a linha do Tenant A`,
+      );
+
+    // Nobody but the owner or a platform admin can write it — not even
+    // the linked mentor or the tenant admin: confirmed against the real
+    // app code that no such write path exists today.
+    for (const nonOwner of ["mentor-a", "tenant-admin-a", "mentor-b", "tenant-admin-b", "student-b"]) {
+      assert.equal(
+        (await asActor(nonOwner, `UPDATE aristo.${table} SET data='{"x":1}' WHERE id='row-a'`)).rowCount,
+        0,
+        `${nonOwner} não deve conseguir atualizar a linha de outro usuário`,
+      );
+      assert.equal(
+        (await asActor(nonOwner, `DELETE FROM aristo.${table} WHERE id='row-a'`)).rowCount,
+        0,
+        `${nonOwner} não deve conseguir deletar a linha de outro usuário`,
+      );
+    }
+    await assert.rejects(
+      asActor(
+        "mentor-a",
+        `INSERT INTO aristo.${table}(id,user_id,data,tenant_id,organization_id) VALUES('row-mentor','student-a','{}',$1,$2)`,
+        [tenantAId, orgAId],
+      ),
+      /row-level security/i,
+      "mentor não pode inserir dado em nome de um aluno",
+    );
+
+    // The owner themselves can update and delete their own row.
+    await asActor("student-a", `UPDATE aristo.${table} SET data='{"updated":true}' WHERE id='row-a'`);
+    assert.deepEqual(
+      JSON.parse((await asOwner(`SELECT data FROM aristo.${table} WHERE id='row-a'`)).rows[0].data),
+      { updated: true },
+    );
+    await asActor("student-a", `DELETE FROM aristo.${table} WHERE id='row-a'`);
+    assert.equal(
+      (await asOwner(`SELECT 1 FROM aristo.${table} WHERE id='row-a'`)).rows.length,
+      0,
+    );
+
+    // Platform admin can write anyone's row.
+    await asActor(
+      "platform-admin",
+      `INSERT INTO aristo.${table}(id,user_id,data,tenant_id,organization_id) VALUES('row-admin','student-b','{}',$1,$2)`,
+      [tenantBId, orgBId],
+    );
+    await asActor("platform-admin", `DELETE FROM aristo.${table} WHERE id='row-admin'`);
+    assert.equal(
+      (await asOwner(`SELECT 1 FROM aristo.${table} WHERE id='row-admin'`)).rows.length,
+      0,
+    );
+
+    // No actor context: zero visibility, no error.
+    assert.equal((await asActor(null, `SELECT * FROM aristo.${table}`)).rows.length, 0);
+  } finally {
+    await db.close();
+  }
+}
+
+test("Fase 3B RLS batch 3: items enforces isolation as aristo_app", () =>
+  checkIdBasedBusinessTable("items"));
+test("Fase 3B RLS batch 3: questions enforces isolation as aristo_app", () =>
+  checkIdBasedBusinessTable("questions"));
+test("Fase 3B RLS batch 3: study_sessions enforces isolation as aristo_app", () =>
+  checkIdBasedBusinessTable("study_sessions"));
+
+test("Fase 3B RLS batch 3: plans enforces isolation as aristo_app", async () => {
+  // plans has no standalone id column — PRIMARY KEY(user_id, date).
+  const db = new PGlite();
+  try {
+    const { tenantAId, orgAId, tenantBId, orgBId, asActor, asOwner } =
+      await buildTwoTenantFixture(db);
+    const planDate = "2026-01-01";
+
+    await asActor(
+      "student-a",
+      "INSERT INTO aristo.plans(user_id,date,data,tenant_id,organization_id) VALUES('student-a',$1,'{}',$2,$3)",
+      [planDate, tenantAId, orgAId],
+    );
+
+    assert.equal(
+      (await asActor("student-a", "SELECT 1 FROM aristo.plans WHERE user_id='student-a' AND date=$1", [planDate])).rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("mentor-a", "SELECT 1 FROM aristo.plans WHERE user_id='student-a' AND date=$1", [planDate])).rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("tenant-admin-a", "SELECT 1 FROM aristo.plans WHERE user_id='student-a' AND date=$1", [planDate])).rows.length,
+      1,
+    );
+    for (const outsider of ["mentor-b", "tenant-admin-b", "student-b"])
+      assert.equal(
+        (await asActor(outsider, "SELECT 1 FROM aristo.plans WHERE user_id='student-a' AND date=$1", [planDate])).rows.length,
+        0,
+      );
+
+    for (const nonOwner of ["mentor-a", "tenant-admin-a", "mentor-b", "student-b"]) {
+      assert.equal(
+        (
+          await asActor(
+            nonOwner,
+            "UPDATE aristo.plans SET data='{\"x\":1}' WHERE user_id='student-a' AND date=$1",
+            [planDate],
+          )
+        ).rowCount,
+        0,
+        `${nonOwner} não deve conseguir atualizar o plano de outro usuário`,
+      );
+    }
+
+    await asActor(
+      "student-a",
+      "UPDATE aristo.plans SET data='{\"updated\":true}' WHERE user_id='student-a' AND date=$1",
+      [planDate],
+    );
+    assert.deepEqual(
+      JSON.parse((await asOwner("SELECT data FROM aristo.plans WHERE user_id='student-a' AND date=$1", [planDate])).rows[0].data),
+      { updated: true },
+    );
+    await asActor("student-a", "DELETE FROM aristo.plans WHERE user_id='student-a' AND date=$1", [planDate]);
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.plans WHERE user_id='student-a' AND date=$1", [planDate])).rows.length,
+      0,
+    );
+
+    assert.equal((await asActor(null, "SELECT * FROM aristo.plans")).rows.length, 0);
+  } finally {
+    await db.close();
+  }
+});
+
+test("Fase 3B RLS batch 3: records enforces isolation as aristo_app", async () => {
+  // records has PRIMARY KEY(user_id, item_id, date) and a composite FK to
+  // items(user_id, id) — needs an owning item to exist first.
+  const db = new PGlite();
+  try {
+    const { tenantAId, orgAId, tenantBId, orgBId, asActor, asOwner } =
+      await buildTwoTenantFixture(db);
+    const date = "2026-01-01";
+
+    await asActor(
+      "student-a",
+      "INSERT INTO aristo.items(id,user_id,data,tenant_id,organization_id) VALUES('item-a','student-a','{}',$1,$2)",
+      [tenantAId, orgAId],
+    );
+    await asActor(
+      "student-a",
+      "INSERT INTO aristo.records(user_id,item_id,date,target,tenant_id,organization_id) VALUES('student-a','item-a',$1,1,$2,$3)",
+      [date, tenantAId, orgAId],
+    );
+
+    const whereClause = "user_id='student-a' AND item_id='item-a' AND date=$1";
+    assert.equal(
+      (await asActor("student-a", `SELECT 1 FROM aristo.records WHERE ${whereClause}`, [date])).rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("mentor-a", `SELECT 1 FROM aristo.records WHERE ${whereClause}`, [date])).rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("tenant-admin-a", `SELECT 1 FROM aristo.records WHERE ${whereClause}`, [date])).rows.length,
+      1,
+    );
+    for (const outsider of ["mentor-b", "tenant-admin-b", "student-b"])
+      assert.equal(
+        (await asActor(outsider, `SELECT 1 FROM aristo.records WHERE ${whereClause}`, [date])).rows.length,
+        0,
+      );
+
+    for (const nonOwner of ["mentor-a", "tenant-admin-a", "student-b"]) {
+      assert.equal(
+        (
+          await asActor(nonOwner, `UPDATE aristo.records SET value=99 WHERE ${whereClause}`, [date])
+        ).rowCount,
+        0,
+        `${nonOwner} não deve conseguir atualizar o record de outro usuário`,
+      );
+    }
+
+    await asActor("student-a", `UPDATE aristo.records SET value=1, done=1 WHERE ${whereClause}`, [date]);
+    assert.equal(
+      (await asOwner(`SELECT done FROM aristo.records WHERE ${whereClause}`, [date])).rows[0].done,
+      1,
+    );
+    await asActor("student-a", `DELETE FROM aristo.records WHERE ${whereClause}`, [date]);
+    assert.equal(
+      (await asOwner(`SELECT 1 FROM aristo.records WHERE ${whereClause}`, [date])).rows.length,
+      0,
+    );
+
+    assert.equal((await asActor(null, "SELECT * FROM aristo.records")).rows.length, 0);
+  } finally {
+    await db.close();
+  }
+});
