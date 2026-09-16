@@ -20,7 +20,8 @@
     "db:import": "node --env-file-if-exists=.env.local scripts/import-sqlite.mjs",
     "test:postgres": "node scripts/test-postgres.mjs",
     "backup:postgres": "node --env-file-if-exists=.env.local scripts/backup-postgres.mjs",
-    "db:check": "node --env-file-if-exists=.env.local scripts/check-postgres.mjs"
+    "db:check": "node --env-file-if-exists=.env.local scripts/check-postgres.mjs",
+    "db:provision-app-role": "node --env-file-if-exists=.env.local scripts/provision-app-role.mjs"
   },
   "dependencies": {
     "@radix-ui/react-progress": "^1.1.16",
