@@ -2140,3 +2140,157 @@ test("Fase 3B RLS batch 7: demo_batches (self SELECT, admin-only writes) and aud
     await db.close();
   }
 });
+
+test("Fase 3B RLS batch 8: profiles enforces self-only access (the table missed by batches 1-7)", async () => {
+  const db = new PGlite();
+  try {
+    const { asActor, asOwner } = await buildTwoTenantFixture(db);
+
+    // --- INSERT: self only (createProfile's own pattern — the actor is
+    // always the freshly minted user's own id).
+    await asActor(
+      "student-a",
+      "INSERT INTO aristo.profiles(user_id,full_name,avatar_url) VALUES('student-a','Sofia A',NULL)",
+    );
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.profiles WHERE user_id='student-a'")).rows.length,
+      1,
+    );
+    await assert.rejects(
+      asActor(
+        "mentor-a",
+        "INSERT INTO aristo.profiles(user_id,full_name,avatar_url) VALUES('student-b','Forged',NULL)",
+      ),
+      /row-level security/i,
+      "mentor-a não pode criar o profile de outro usuário",
+    );
+
+    // --- SELECT: self and platform admin only.
+    assert.equal(
+      (await asActor("student-a", "SELECT 1 FROM aristo.profiles WHERE user_id='student-a'")).rows
+        .length,
+      1,
+    );
+    assert.equal(
+      (await asActor("mentor-a", "SELECT 1 FROM aristo.profiles WHERE user_id='student-a'")).rows
+        .length,
+      0,
+    );
+    assert.equal(
+      (await asActor("platform-admin", "SELECT 1 FROM aristo.profiles WHERE user_id='student-a'"))
+        .rows.length,
+      1,
+    );
+
+    // --- UPDATE: self only (updateProfileName/updateProfileAvatar's own
+    // pattern).
+    await asActor(
+      "student-a",
+      "UPDATE aristo.profiles SET full_name='Sofia Updated' WHERE user_id='student-a'",
+    );
+    assert.equal(
+      (await asOwner("SELECT full_name FROM aristo.profiles WHERE user_id='student-a'")).rows[0]
+        .full_name,
+      "Sofia Updated",
+    );
+    assert.equal(
+      (
+        await asActor(
+          "mentor-a",
+          "UPDATE aristo.profiles SET full_name='Hackeado' WHERE user_id='student-a'",
+        )
+      ).rowCount,
+      0,
+    );
+
+    // --- DELETE: admin-only (no confirmed path — rows are only ever
+    // removed via ON DELETE CASCADE from users, run as the owning role).
+    assert.equal(
+      (await asActor("student-a", "DELETE FROM aristo.profiles WHERE user_id='student-a'")).rowCount,
+      0,
+    );
+    await asActor("platform-admin", "DELETE FROM aristo.profiles WHERE user_id='student-a'");
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.profiles WHERE user_id='student-a'")).rows.length,
+      0,
+    );
+
+    assert.equal((await asActor(null, "SELECT * FROM aristo.profiles")).rows.length, 0);
+  } finally {
+    await db.close();
+  }
+});
+
+test("Fase 3B pre-cutover: the real registration sequence completes end-to-end as aristo_app", async () => {
+  const db = new PGlite();
+  try {
+    const { tenantAId, orgAId } = await buildTwoTenantFixture(db);
+
+    // Mirrors auth/route.ts's register handler + identity.ts's
+    // createProfile/syncTenantMembership/ensureOrganizationMembership,
+    // statement for statement, in one transaction, as aristo_app — not
+    // just each policy in isolation. This is the exact sequence that would
+    // have broken outright post-cutover with profiles left unpoliced: a
+    // single failing INSERT here rolls back the whole account.
+    await db.exec("BEGIN");
+    await db.exec("SET ROLE aristo_app");
+    try {
+      await db.query("SELECT set_config('app.user_id', 'fresh-registrant', true)");
+      await db.query(
+        "INSERT INTO aristo.users(id,name,email,password,created_at) VALUES('fresh-registrant','Fresh Registrant','fresh-registrant@example.test','x',0)",
+      );
+      await db.query(
+        "INSERT INTO aristo.profiles(user_id,full_name,avatar_url) VALUES('fresh-registrant','Fresh Registrant',NULL)",
+      );
+      await db.query(
+        `INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES($1,'fresh-registrant','STUDENT')
+         ON CONFLICT(tenant_id,user_id) DO UPDATE SET role=excluded.role, updated_at=now()`,
+        [tenantAId],
+      );
+      await db.query(
+        `INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role,status)
+         VALUES($1,$2,'fresh-registrant','STUDENT','active')
+         ON CONFLICT(organization_id,user_id) DO UPDATE
+           SET member_role=excluded.member_role, status='active', updated_at=now()`,
+        [tenantAId, orgAId],
+      );
+      await db.exec("COMMIT");
+    } catch (e) {
+      await db.exec("ROLLBACK");
+      throw e;
+    } finally {
+      await db.exec("RESET ROLE");
+    }
+
+    // Confirm every row actually landed (a silently-skipped INSERT would
+    // have made this look like a pass without one).
+    assert.equal(
+      (await db.query("SELECT 1 FROM aristo.users WHERE id='fresh-registrant'")).rows.length,
+      1,
+    );
+    assert.equal(
+      (await db.query("SELECT 1 FROM aristo.profiles WHERE user_id='fresh-registrant'")).rows.length,
+      1,
+    );
+    assert.equal(
+      (
+        await db.query(
+          "SELECT role FROM aristo.tenant_members WHERE tenant_id=$1 AND user_id='fresh-registrant'",
+          [tenantAId],
+        )
+      ).rows[0].role,
+      "STUDENT",
+    );
+    assert.equal(
+      (
+        await db.query(
+          "SELECT member_role,status FROM aristo.organization_members WHERE organization_id=$1 AND user_id='fresh-registrant'",
+          [orgAId],
+        )
+      ).rows[0].status,
+      "active",
+    );
+  } finally {
+    await db.close();
+  }
+});

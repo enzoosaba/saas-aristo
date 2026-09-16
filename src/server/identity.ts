@@ -183,9 +183,29 @@ export async function releaseOrganizationMembershipIfOrphaned(
     .get(studentId);
   if ((stillLinked as { linked: boolean } | undefined)?.linked) return;
   const { organization_id } = await defaultOrganization();
-  await db()
+  // Fase 3B pre-cutover audit: this UPDATE's organization_members RLS
+  // policy requires the caller to be *this organization's* active mentor
+  // (is_organization_mentor) — true for every reachable caller today,
+  // since removeStudent's mentor_students link guarantees they already
+  // went through addStudent, and there is only one organization per
+  // tenant. Not defensively checked before now: if that invariant ever
+  // breaks (multi-org support, or a mentor's own membership suspended
+  // mid-flight), USING would silently exclude the row — 0 rows, no error —
+  // leaving the student's membership stuck at 'active' instead of
+  // 'suspended'. Not a security escalation (worst case is a stale roster
+  // entry), so this only logs rather than throwing: throwing here would
+  // roll back removeStudent's whole transaction, undoing the
+  // mentor_students deletion that already succeeded correctly — same
+  // "log, don't fail an already-successful action" choice as
+  // recovery/route.ts's email-send failure.
+  const result = await db()
     .prepare(
       "UPDATE organization_members SET status='suspended', updated_at=now() WHERE organization_id=? AND user_id=?",
     )
     .run(organization_id, studentId);
+  if (!result.changes)
+    console.error(
+      "release_organization_membership_orphan_mismatch",
+      { studentId, organization_id },
+    );
 }
