@@ -28,7 +28,7 @@ const browser = await chromium.launch({
 try {
   const password = "Entrega-Segura-2026!";
   const accounts = [];
-  for (const name of ["Mentor", "Aluno", "Outro"]) {
+  for (const name of ["Mentor", "Aluno", "Outro", "ModeloNovo"]) {
     const ctx = await browser.newContext();
     const email = `${name.toLowerCase()}-${Date.now()}@example.test`;
     const response = await ctx.request.post(base + "/api/auth", {
@@ -39,9 +39,39 @@ try {
     const { user } = await (await ctx.request.get(base + "/api/auth")).json();
     accounts.push({ ctx, user, email });
   }
-  const [mentor, student, other] = accounts;
+  const [mentor, student, other, modeloNovo] = accounts;
   const post = (account, path, data) =>
     account.ctx.request.post(base + path, { headers: { Origin: base }, data });
+
+  // Fase 3A: requireMentor() must work through the new SaaS model alone,
+  // not only via the users.role fallback. "modeloNovo" registers as a
+  // plain student (users.role stays 'student') and is never promoted the
+  // legacy way — only organization_members.member_role is set directly,
+  // proving the new model is genuinely consulted, not just present in code.
+  if (pg) {
+    assert.equal(
+      (await modeloNovo.ctx.request.get(base + "/api/mentor")).status(),
+      403,
+      "sem MENTOR em nenhum modelo, deve continuar bloqueado",
+    );
+    await admin(
+      "UPDATE organization_members SET member_role='MENTOR' WHERE user_id=?",
+      [modeloNovo.user.id],
+    );
+    assert.equal(
+      (await modeloNovo.ctx.request.get(base + "/api/mentor")).status(),
+      200,
+      "MENTOR em organization_members deve bastar, mesmo com users.role ainda 'student'",
+    );
+    const [row] = await admin("SELECT role FROM users WHERE id=?", [
+      modeloNovo.user.id,
+    ]);
+    assert.equal(
+      row.role,
+      "student",
+      "users.role não foi tocado — o modelo novo decidiu sozinho",
+    );
+  }
 
   // Fase 2B: every new item/record/plan/question/study_session must be
   // stamped with the creating user's own tenant/organization scope —
