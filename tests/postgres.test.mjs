@@ -488,3 +488,193 @@ test("Fase 3B authorization functions fail closed with no actor context at all",
     await db.close();
   }
 });
+
+test("Fase 3B RLS batch 1: platform_admins and tenants enforce isolation as aristo_app", async () => {
+  // Tenant B exists only inside this disposable fixture, not on the real
+  // Supabase database — this proves isolation without leaving permanent
+  // fake data in what is meant to become a real production database.
+  const db = new PGlite();
+  try {
+    for (const file of readdirSync("supabase/migrations").sort())
+      await db.exec(readFileSync(`supabase/migrations/${file}`, "utf8"));
+
+    // aristo_app is NOLOGIN; SET ROLE requires membership, exactly the
+    // same grant needed (and left permanently in place) on the real
+    // Supabase database for this same reason.
+    await db.exec("GRANT aristo_app TO postgres");
+
+    const [{ id: tenantAId }] = (
+      await db.query("SELECT id FROM aristo.tenants WHERE slug='mentoria-coelho'")
+    ).rows;
+    const [{ id: tenantBId }] = (
+      await db.query(
+        "INSERT INTO aristo.tenants(name,slug) VALUES('Tenant B','tenant-b') RETURNING id",
+      )
+    ).rows;
+
+    await db.exec(`
+      INSERT INTO aristo.users(id,name,email,password,role,created_at) VALUES
+        ('platform-admin','Admin','admin@example.test','x','student',0),
+        ('tenant-admin-a','TAdminA','ta@example.test','x','student',0),
+        ('mentor-a','MentorA','ma@example.test','x','mentor',0),
+        ('student-a','StudentA','sa@example.test','x','student',0),
+        ('tenant-admin-b','TAdminB','tb@example.test','x','student',0),
+        ('mentor-b','MentorB','mb@example.test','x','mentor',0),
+        ('student-b','StudentB','sb@example.test','x','student',0);
+    `);
+    await db.query("INSERT INTO aristo.platform_admins(user_id) VALUES ('platform-admin')");
+    for (const [tenantId, userId, role] of [
+      [tenantAId, "tenant-admin-a", "TENANT_ADMIN"],
+      [tenantAId, "mentor-a", "MENTOR"],
+      [tenantAId, "student-a", "STUDENT"],
+      [tenantBId, "tenant-admin-b", "TENANT_ADMIN"],
+      [tenantBId, "mentor-b", "MENTOR"],
+      [tenantBId, "student-b", "STUDENT"],
+    ])
+      await db.query(
+        "INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES ($1,$2,$3)",
+        [tenantId, userId, role],
+      );
+
+    // Runs one statement as a given actor, under aristo_app, in its own
+    // transaction — SET ROLE is session-level (unlike SET LOCAL) and
+    // survives ROLLBACK, so it's always explicitly reset in `finally`,
+    // after the transaction has already been committed or rolled back.
+    async function asActor(userId, sql, params = []) {
+      await db.exec("BEGIN");
+      await db.exec("SET ROLE aristo_app");
+      try {
+        await db.query("SELECT set_config('app.user_id', $1, true)", [
+          userId ?? "",
+        ]);
+        const result = await db.query(sql, params);
+        await db.exec("COMMIT");
+        return result;
+      } catch (e) {
+        await db.exec("ROLLBACK");
+        throw e;
+      } finally {
+        await db.exec("RESET ROLE");
+      }
+    }
+    const asOwner = (sql, params = []) => db.query(sql, params);
+
+    // platform_admin: full visibility and write access to both tables,
+    // across both tenants.
+    assert.equal(
+      (await asActor("platform-admin", "SELECT user_id FROM aristo.platform_admins")).rows.length,
+      1,
+    );
+    assert.deepEqual(
+      (await asActor("platform-admin", "SELECT slug FROM aristo.tenants ORDER BY slug")).rows.map((r) => r.slug),
+      ["mentoria-coelho", "tenant-b"],
+    );
+    const [{ id: tenantCId }] = (
+      await asActor(
+        "platform-admin",
+        "INSERT INTO aristo.tenants(name,slug) VALUES('Tenant C','tenant-c') RETURNING id",
+      )
+    ).rows;
+    await asActor(
+      "platform-admin",
+      "UPDATE aristo.tenants SET name='Tenant C Renamed' WHERE id=$1",
+      [tenantCId],
+    );
+    assert.equal(
+      (await asOwner("SELECT name FROM aristo.tenants WHERE id=$1", [tenantCId])).rows[0].name,
+      "Tenant C Renamed",
+    );
+    await asActor("platform-admin", "DELETE FROM aristo.tenants WHERE id=$1", [tenantCId]);
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.tenants WHERE id=$1", [tenantCId])).rows.length,
+      0,
+    );
+
+    // tenant-admin-a: sees only Tenant A, can update it, cannot touch
+    // Tenant B, cannot create or delete any tenant, no access at all to
+    // platform_admins (being a tenant admin is not being a platform admin).
+    assert.deepEqual(
+      (await asActor("tenant-admin-a", "SELECT slug FROM aristo.tenants")).rows.map((r) => r.slug),
+      ["mentoria-coelho"],
+    );
+    await asActor(
+      "tenant-admin-a",
+      "UPDATE aristo.tenants SET name='Mentoria Coelho Atualizada' WHERE id=$1",
+      [tenantAId],
+    );
+    assert.equal(
+      (await asOwner("SELECT name FROM aristo.tenants WHERE id=$1", [tenantAId])).rows[0].name,
+      "Mentoria Coelho Atualizada",
+    );
+    assert.equal(
+      (
+        await asActor(
+          "tenant-admin-a",
+          "UPDATE aristo.tenants SET name='Sequestrado' WHERE id=$1",
+          [tenantBId],
+        )
+      ).rowCount,
+      0,
+      "tenant B é invisível para tenant-admin-a — a linha nem entra no alvo do UPDATE",
+    );
+    await assert.rejects(
+      asActor("tenant-admin-a", "INSERT INTO aristo.tenants(name,slug) VALUES('X','tenant-x')"),
+      /row-level security/i,
+    );
+    assert.equal(
+      (await asActor("tenant-admin-a", "DELETE FROM aristo.tenants WHERE id=$1", [tenantAId])).rowCount,
+      0,
+      "só platform_admin pode deletar tenant, mesmo o admin do próprio tenant",
+    );
+    assert.equal(
+      (await asActor("tenant-admin-a", "SELECT * FROM aristo.platform_admins")).rows.length,
+      0,
+    );
+
+    // mentor-a / student-a: read-only visibility of their own tenant, zero
+    // write access, zero visibility into platform_admins or Tenant B.
+    for (const memberId of ["mentor-a", "student-a"]) {
+      assert.deepEqual(
+        (await asActor(memberId, "SELECT slug FROM aristo.tenants")).rows.map((r) => r.slug),
+        ["mentoria-coelho"],
+      );
+      assert.equal(
+        (await asActor(memberId, "UPDATE aristo.tenants SET name='Invasão' WHERE id=$1", [tenantAId])).rowCount,
+        0,
+      );
+      assert.equal(
+        (await asActor(memberId, "SELECT * FROM aristo.platform_admins")).rows.length,
+        0,
+      );
+    }
+    await assert.rejects(
+      asActor("student-a", "INSERT INTO aristo.tenants(name,slug) VALUES('Y','tenant-y')"),
+      /row-level security/i,
+    );
+
+    // Tenant B's own admin/mentor/student: symmetric to Tenant A, proving
+    // this isn't special-cased to one side.
+    assert.deepEqual(
+      (await asActor("tenant-admin-b", "SELECT slug FROM aristo.tenants")).rows.map((r) => r.slug),
+      ["tenant-b"],
+    );
+    assert.equal(
+      (
+        await asActor(
+          "tenant-admin-b",
+          "UPDATE aristo.tenants SET name='Sequestrado' WHERE id=$1",
+          [tenantAId],
+        )
+      ).rowCount,
+      0,
+      "tenant-admin-b não administra o Tenant A",
+    );
+
+    // No context at all (no session, matching a pre-auth or admin-script
+    // query): zero visibility on both tables, never an error.
+    assert.equal((await asActor(null, "SELECT * FROM aristo.tenants")).rows.length, 0);
+    assert.equal((await asActor(null, "SELECT * FROM aristo.platform_admins")).rows.length, 0);
+  } finally {
+    await db.close();
+  }
+});
