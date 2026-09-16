@@ -1340,7 +1340,7 @@ test("Fase 3B RLS batch 4: tenant_members enforces isolation as aristo_app", asy
 test("Fase 3B RLS batch 4: organization_members enforces isolation, self-promotion is rejected", async () => {
   const db = new PGlite();
   try {
-    const { tenantAId, orgAId, tenantBId, orgBId, asActor, asOwner } =
+    const { tenantAId, orgAId, asActor, asOwner } =
       await buildTwoTenantFixture(db);
 
     await db.exec(`
