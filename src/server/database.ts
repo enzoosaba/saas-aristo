@@ -20,9 +20,22 @@ const context = (shared.aristoContext ??= new AsyncLocalStorage<Context>());
 const actorContext = (shared.aristoActorContext ??= new AsyncLocalStorage<ActorContext>());
 export const isPostgres = () => Boolean(process.env.DATABASE_URL);
 
+// Fase 3B part 7 (cutover): the running app connects as aristo_app
+// (RLS-restricted) when APP_DATABASE_URL is set, falling back to
+// DATABASE_URL (the owning role, bypasses RLS) otherwise — so the cutover
+// and its rollback are each a single environment variable change plus a
+// restart, never a code change or schema migration. Every other Postgres
+// connection in this codebase (migrate-postgres.mjs, check-postgres.mjs,
+// backup-postgres.mjs, provision-app-role.mjs, set-mentor.mjs,
+// import-sqlite.mjs) calls postgresConfig() with no override and must
+// keep using DATABASE_URL/the owner role — they perform schema changes or
+// administrative reads/writes that RLS would otherwise block.
 function pool() {
   if (!shared.aristoPool) {
-    shared.aristoPool = new Pool(postgresConfig());
+    const connectionUrl = process.env.APP_DATABASE_URL || process.env.DATABASE_URL;
+    shared.aristoPool = new Pool(
+      postgresConfig({ ...process.env, DATABASE_URL: connectionUrl }),
+    );
     shared.aristoPool.on("error", () => console.error("postgres_pool_error"));
   }
   return shared.aristoPool;
