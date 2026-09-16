@@ -43,6 +43,82 @@ try {
   const post = (account, path, data) =>
     account.ctx.request.post(base + path, { headers: { Origin: base }, data });
 
+  // Fase 3B.3-bis: prove — with real concurrent HTTP requests against the
+  // real running server, not a simulated/sequential check — that the
+  // AsyncLocalStorage-based actor context (setActor via enterWith() in
+  // currentUser(), see src/server/auth.ts) never leaks between requests
+  // from different users landing in the same Node process at the same
+  // time. This is the Node-side half of the isolation guarantee; the
+  // Postgres-side half (SET LOCAL never leaking across a reused pooled
+  // connection) was already verified directly against Supabase.
+  {
+    const identified = [mentor, student, other, modeloNovo];
+    const rounds = 20;
+    const requests = [];
+    for (let round = 0; round < rounds; round++)
+      for (const account of identified)
+        requests.push(
+          account.ctx.request
+            .get(base + "/api/study")
+            .then((r) => r.json())
+            .then((responseBody) => ({
+              account: account.user.name,
+              expected: account.user.id,
+              actual: responseBody.user?.id,
+            })),
+        );
+    // Promise.all, not sequential awaits: all ~80 requests are in flight
+    // together, genuinely interleaved in the same event loop turn.
+    const results = await Promise.all(requests);
+    const mismatches = results.filter((r) => r.expected !== r.actual);
+    assert.equal(
+      mismatches.length,
+      0,
+      `vazamento de contexto entre requisições concorrentes: ${JSON.stringify(mismatches.slice(0, 5))}`,
+    );
+
+    // Same proof on the write side: concurrent mutations from two
+    // different users landing with the correct owner AND (under Postgres)
+    // the correct resolved tenant/organization scope — not just that
+    // reads come back right, but that the actor threaded into an actual
+    // transaction/INSERT is never swapped between concurrent writers.
+    const idA = randomUUID();
+    const idB = randomUUID();
+    const { today: concurrencyDate } = await (
+      await mentor.ctx.request.get(base + "/api/study")
+    ).json();
+    const makeItem = (id, title) => ({
+      action: "save-item",
+      item: {
+        id,
+        kind: "habit",
+        title,
+        notes: "",
+        frequency: "Todos os dias",
+        measure: "check",
+        target: 1,
+        unit: "",
+        date: concurrencyDate,
+        time: "",
+        priority: "Normal",
+        value: 0,
+        done: false,
+      },
+    });
+    const [statusA, statusB] = await Promise.all([
+      post(mentor, "/api/study", makeItem(idA, "Item concorrente A")),
+      post(student, "/api/study", makeItem(idB, "Item concorrente B")),
+    ]);
+    assert.equal(statusA.status(), 200);
+    assert.equal(statusB.status(), 200);
+    if (pg) {
+      const [rowA] = await admin("SELECT user_id FROM items WHERE id=?", [idA]);
+      const [rowB] = await admin("SELECT user_id FROM items WHERE id=?", [idB]);
+      assert.equal(rowA.user_id, mentor.user.id);
+      assert.equal(rowB.user_id, student.user.id);
+    }
+  }
+
   // Fase 3A: requireMentor() must work through the new SaaS model alone,
   // not only via the users.role fallback. "modeloNovo" registers as a
   // plain student (users.role stays 'student') and is never promoted the

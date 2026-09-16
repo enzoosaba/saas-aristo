@@ -420,3 +420,71 @@ test("Fase 3B authorization functions compute correctly, without recursion", asy
     await db.close();
   }
 });
+
+test("Fase 3B authorization functions fail closed with no actor context at all", async () => {
+  // Simulates a fresh connection where nobody ever called setActor() —
+  // an administrative script, a migration, or any query that runs before
+  // src/server/auth.ts's currentUser() resolves a session. No
+  // set_config('app.user_id', ...) call happens anywhere in this test.
+  const db = new PGlite();
+  try {
+    for (const file of readdirSync("supabase/migrations").sort())
+      await db.exec(readFileSync(`supabase/migrations/${file}`, "utf8"));
+
+    const [{ id: tenantId }] = (
+      await db.query("SELECT id FROM aristo.tenants WHERE slug='mentoria-coelho'")
+    ).rows;
+    const [{ id: orgId }] = (
+      await db.query(
+        "SELECT id FROM aristo.organizations WHERE tenant_id=$1 AND name='Turma Inicial'",
+        [tenantId],
+      )
+    ).rows;
+    await db.exec(
+      "INSERT INTO aristo.users(id,name,email,password,role,created_at) VALUES('someone','S','s@example.test','x','student',0)",
+    );
+
+    // "Falsy" (NULL or false), never true, never an error — a NULL from a
+    // boolean-valued SQL function is what a bare OR-chain naturally
+    // produces when every branch is NULL/false, and RLS treats NULL in
+    // USING/WITH CHECK exactly like false (the row is excluded either
+    // way), so this is a safe, correct outcome, not just an accepted one.
+    const checks = [
+      ["current_user_id()", null],
+      ["is_platform_admin()", false],
+      ["current_tenant_id()", null],
+      [`is_tenant_admin('${tenantId}')`, false],
+      [`is_tenant_member('${tenantId}')`, false],
+      [`can_manage_tenant('${tenantId}')`, false],
+      [`is_organization_mentor('${orgId}')`, false],
+      [`is_organization_member('${orgId}')`, false],
+      [`can_manage_organization('${orgId}')`, false],
+      [`can_access_student('someone', '${orgId}')`, false],
+      [`can_access_business_row('someone', '${tenantId}', '${orgId}')`, false],
+    ];
+    for (const [call, expected] of checks) {
+      const { rows } = await db.query(`SELECT aristo.${call} AS v`);
+      const value = rows[0].v;
+      assert.ok(
+        value === null || value === false,
+        `${call} deveria ser NULL ou false sem contexto, veio ${JSON.stringify(value)}`,
+      );
+      if (expected === false)
+        assert.notEqual(value, true, `${call} nunca pode ser true sem contexto`);
+    }
+
+    // The two email-lookup functions are meant to work with no actor at
+    // all (that's their whole purpose) — confirm they still do, and that
+    // an unmatched email safely returns no rows rather than erroring.
+    const found = await db.query(
+      "SELECT * FROM aristo.find_user_by_email('s@example.test')",
+    );
+    assert.equal(found.rows[0].id, "someone");
+    const notFound = await db.query(
+      "SELECT * FROM aristo.find_user_by_email('nobody@example.test')",
+    );
+    assert.equal(notFound.rows.length, 0);
+  } finally {
+    await db.close();
+  }
+});
