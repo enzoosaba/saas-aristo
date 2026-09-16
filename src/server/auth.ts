@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { randomBytes, scrypt, timingSafeEqual, createHash } from "node:crypto";
 import { promisify } from "node:util";
-import { db } from "./db";
+import { db, setActor } from "./db";
 import { HttpError } from "./http";
 import type { User } from "@/lib/domain";
 const derive = promisify(scrypt);
@@ -23,13 +23,18 @@ export async function passwordMatches(password: string, stored: string) {
 export async function currentUser(): Promise<User | null> {
   const token = (await cookies()).get("aristo-session")?.value;
   if (!token) return null;
-  return (
+  // Fase 3B: this lookup itself necessarily runs with no actor established
+  // yet (that's what it's for) — sessions/users' RLS policies allow it by
+  // token/self-lookup, not by identity. Every query after this one in the
+  // same request runs as the resolved user, once found.
+  const user =
     ((await db()
       .prepare(
         "SELECT u.id,u.name,u.email,u.role,u.avatar FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>?",
       )
-      .get(hash(token), Date.now())) as User) || null
-  );
+      .get(hash(token), Date.now())) as User) || null;
+  if (user) setActor(user.id);
+  return user;
 }
 export async function requireUser() {
   const user = await currentUser();
@@ -37,6 +42,10 @@ export async function requireUser() {
   return user;
 }
 export async function createSession(userId: string) {
+  // Defensive: callers should already have set the actor (register mints
+  // it explicitly; login resolves it right before calling this), but a
+  // session is always for this exact user, so make it self-sufficient too.
+  setActor(userId);
   const token = randomBytes(32).toString("hex");
   const maxAge = 60 * 60 * 24 * 7;
   await db().prepare("DELETE FROM sessions WHERE expires < ?").run(Date.now());

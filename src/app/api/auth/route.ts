@@ -8,7 +8,7 @@ import {
   logout,
   requireUser,
 } from "@/server/auth";
-import { db, transaction } from "@/server/db";
+import { db, setActor, transaction } from "@/server/db";
 import { body, failure, HttpError, json, limit } from "@/server/http";
 import {
   createProfile,
@@ -83,6 +83,11 @@ export async function POST(request: Request) {
       const name = data.name;
       const password = await passwordHash(data.password);
       const id = randomUUID();
+      // Fase 3B: nobody is "logged in" yet during registration — the new
+      // account acts as itself from the moment its id is minted, so the
+      // inserts below (self-row) satisfy RLS once policies exist. Until
+      // then this is a no-op (nothing reads app.user_id yet).
+      setActor(id);
       // Fase 0C: the account, its SaaS profile and its Tenant 01 membership
       // are created atomically — any failure rolls back the whole signup.
       await transaction(async () => {
@@ -117,6 +122,11 @@ export async function POST(request: Request) {
     );
     if (!user || !valid)
       throw new HttpError(401, "E-mail ou senha incorretos.");
+    // Fase 3B: the credential lookup above ran with no actor (that's what
+    // it's for — see the note on the users-by-email SELECT); once the
+    // password is verified, every following query in this request is
+    // legitimately "this user acting as themselves".
+    setActor(user.id);
     await transaction(async () => {
       const current = (await connection
         .prepare("SELECT password FROM users WHERE id=? FOR UPDATE")

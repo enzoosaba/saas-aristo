@@ -1,1 +1,1 @@
-﻿export { db, transaction, isPostgres } from "./database";
+﻿export { db, transaction, isPostgres, withActor, setActor } from "./database";
