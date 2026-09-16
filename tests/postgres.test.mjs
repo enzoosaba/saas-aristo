@@ -678,3 +678,234 @@ test("Fase 3B RLS batch 1: platform_admins and tenants enforce isolation as aris
     await db.close();
   }
 });
+
+test("Fase 3B RLS batch 2: tenant_settings and organizations enforce isolation as aristo_app", async () => {
+  // Same fixture shape as batch 1 (Tenant B only inside this disposable
+  // PGlite instance, never written to the real Supabase database), extended
+  // with each tenant's own organization and organization_members.
+  const db = new PGlite();
+  try {
+    for (const file of readdirSync("supabase/migrations").sort())
+      await db.exec(readFileSync(`supabase/migrations/${file}`, "utf8"));
+    await db.exec("GRANT aristo_app TO postgres");
+
+    const [{ id: tenantAId }] = (
+      await db.query("SELECT id FROM aristo.tenants WHERE slug='mentoria-coelho'")
+    ).rows;
+    const [{ id: orgAId }] = (
+      await db.query(
+        "SELECT id FROM aristo.organizations WHERE tenant_id=$1 AND name='Turma Inicial'",
+        [tenantAId],
+      )
+    ).rows;
+    const [{ id: tenantBId }] = (
+      await db.query(
+        "INSERT INTO aristo.tenants(name,slug) VALUES('Tenant B','tenant-b') RETURNING id",
+      )
+    ).rows;
+    const [{ id: orgBId }] = (
+      await db.query(
+        "INSERT INTO aristo.organizations(tenant_id,name) VALUES($1,'Turma B') RETURNING id",
+        [tenantBId],
+      )
+    ).rows;
+
+    await db.exec(`
+      INSERT INTO aristo.users(id,name,email,password,role,created_at) VALUES
+        ('platform-admin','Admin','admin@example.test','x','student',0),
+        ('tenant-admin-a','TAdminA','ta@example.test','x','student',0),
+        ('mentor-a','MentorA','ma@example.test','x','mentor',0),
+        ('student-a','StudentA','sa@example.test','x','student',0),
+        ('tenant-admin-b','TAdminB','tb@example.test','x','student',0),
+        ('mentor-b','MentorB','mb@example.test','x','mentor',0),
+        ('student-b','StudentB','sb@example.test','x','student',0);
+    `);
+    await db.query("INSERT INTO aristo.platform_admins(user_id) VALUES ('platform-admin')");
+    for (const [tenantId, userId, role] of [
+      [tenantAId, "tenant-admin-a", "TENANT_ADMIN"],
+      [tenantAId, "mentor-a", "MENTOR"],
+      [tenantAId, "student-a", "STUDENT"],
+      [tenantBId, "tenant-admin-b", "TENANT_ADMIN"],
+      [tenantBId, "mentor-b", "MENTOR"],
+      [tenantBId, "student-b", "STUDENT"],
+    ])
+      await db.query(
+        "INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES ($1,$2,$3)",
+        [tenantId, userId, role],
+      );
+    for (const [tenantId, orgId, userId, role] of [
+      [tenantAId, orgAId, "mentor-a", "MENTOR"],
+      [tenantAId, orgAId, "student-a", "STUDENT"],
+      [tenantBId, orgBId, "mentor-b", "MENTOR"],
+      [tenantBId, orgBId, "student-b", "STUDENT"],
+    ])
+      await db.query(
+        "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role) VALUES ($1,$2,$3,$4)",
+        [tenantId, orgId, userId, role],
+      );
+    // Fase 0B seeded Tenant A's tenant_settings already (migration 004);
+    // Tenant B needs its own row for this batch's tests.
+    await db.query(
+      "INSERT INTO aristo.tenant_settings(tenant_id,platform_name) VALUES ($1,'Tenant B')",
+      [tenantBId],
+    );
+
+    async function asActor(userId, sql, params = []) {
+      await db.exec("BEGIN");
+      await db.exec("SET ROLE aristo_app");
+      try {
+        await db.query("SELECT set_config('app.user_id', $1, true)", [
+          userId ?? "",
+        ]);
+        const result = await db.query(sql, params);
+        await db.exec("COMMIT");
+        return result;
+      } catch (e) {
+        await db.exec("ROLLBACK");
+        throw e;
+      } finally {
+        await db.exec("RESET ROLE");
+      }
+    }
+    const asOwner = (sql, params = []) => db.query(sql, params);
+
+    // platform_admin: sees and edits both tables across both tenants.
+    assert.deepEqual(
+      (await asActor("platform-admin", "SELECT platform_name FROM aristo.tenant_settings ORDER BY platform_name")).rows.map((r) => r.platform_name),
+      ["Mentoria Coelho", "Tenant B"],
+    );
+    assert.deepEqual(
+      (await asActor("platform-admin", "SELECT name FROM aristo.organizations ORDER BY name")).rows.map((r) => r.name),
+      ["Turma B", "Turma Inicial"],
+    );
+    await asActor(
+      "platform-admin",
+      "UPDATE aristo.tenant_settings SET platform_name='Tenant B Renomeado' WHERE tenant_id=$1",
+      [tenantBId],
+    );
+    assert.equal(
+      (await asOwner("SELECT platform_name FROM aristo.tenant_settings WHERE tenant_id=$1", [tenantBId])).rows[0].platform_name,
+      "Tenant B Renomeado",
+    );
+    const [{ id: orgTempId }] = (
+      await asActor(
+        "platform-admin",
+        "INSERT INTO aristo.organizations(tenant_id,name) VALUES($1,'Turma Temporária') RETURNING id",
+        [tenantAId],
+      )
+    ).rows;
+    await asActor("platform-admin", "DELETE FROM aristo.organizations WHERE id=$1", [orgTempId]);
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.organizations WHERE id=$1", [orgTempId])).rows.length,
+      0,
+    );
+
+    // tenant-admin-a: full read/write within Tenant A, zero visibility or
+    // write access into Tenant B's rows of either table.
+    assert.deepEqual(
+      (await asActor("tenant-admin-a", "SELECT platform_name FROM aristo.tenant_settings")).rows.map((r) => r.platform_name),
+      ["Mentoria Coelho"],
+    );
+    await asActor(
+      "tenant-admin-a",
+      "UPDATE aristo.tenant_settings SET support_email='suporte@coelho.test' WHERE tenant_id=$1",
+      [tenantAId],
+    );
+    assert.equal(
+      (await asOwner("SELECT support_email FROM aristo.tenant_settings WHERE tenant_id=$1", [tenantAId])).rows[0].support_email,
+      "suporte@coelho.test",
+    );
+    assert.equal(
+      (
+        await asActor(
+          "tenant-admin-a",
+          "UPDATE aristo.tenant_settings SET platform_name='Sequestrado' WHERE tenant_id=$1",
+          [tenantBId],
+        )
+      ).rowCount,
+      0,
+    );
+    assert.deepEqual(
+      (await asActor("tenant-admin-a", "SELECT name FROM aristo.organizations")).rows.map((r) => r.name),
+      ["Turma Inicial"],
+    );
+    await asActor(
+      "tenant-admin-a",
+      "UPDATE aristo.organizations SET name='Turma Inicial Renomeada' WHERE id=$1",
+      [orgAId],
+    );
+    assert.equal(
+      (await asOwner("SELECT name FROM aristo.organizations WHERE id=$1", [orgAId])).rows[0].name,
+      "Turma Inicial Renomeada",
+    );
+    assert.equal(
+      (await asActor("tenant-admin-a", "UPDATE aristo.organizations SET name='Sequestrado' WHERE id=$1", [orgBId])).rowCount,
+      0,
+    );
+    assert.equal(
+      (await asActor("tenant-admin-a", "DELETE FROM aristo.organizations WHERE id=$1", [orgBId])).rowCount,
+      0,
+    );
+
+    // mentor-a: read-only on tenant_settings, but CAN update (not delete)
+    // the organization they mentor in — can_manage_organization()
+    // deliberately includes the org's own mentor for UPDATE, unlike
+    // tenant_settings which has no mentor-level write case at all.
+    assert.equal(
+      (
+        await asActor(
+          "mentor-a",
+          "UPDATE aristo.tenant_settings SET platform_name='Invasão' WHERE tenant_id=$1",
+          [tenantAId],
+        )
+      ).rowCount,
+      0,
+    );
+    await asActor(
+      "mentor-a",
+      "UPDATE aristo.organizations SET description='Atualizado pelo mentor' WHERE id=$1",
+      [orgAId],
+    );
+    assert.equal(
+      (await asOwner("SELECT description FROM aristo.organizations WHERE id=$1", [orgAId])).rows[0].description,
+      "Atualizado pelo mentor",
+    );
+    assert.equal(
+      (await asActor("mentor-a", "DELETE FROM aristo.organizations WHERE id=$1", [orgAId])).rowCount,
+      0,
+      "mentor pode atualizar, mas não deletar a própria organização",
+    );
+
+    // student-a: read-only on both tables, no exceptions.
+    assert.deepEqual(
+      (await asActor("student-a", "SELECT name FROM aristo.organizations")).rows.map((r) => r.name),
+      ["Turma Inicial Renomeada"],
+    );
+    assert.equal(
+      (
+        await asActor(
+          "student-a",
+          "UPDATE aristo.organizations SET name='Invasão' WHERE id=$1",
+          [orgAId],
+        )
+      ).rowCount,
+      0,
+    );
+    assert.equal(
+      (
+        await asActor(
+          "student-a",
+          "UPDATE aristo.tenant_settings SET platform_name='Invasão' WHERE tenant_id=$1",
+          [tenantAId],
+        )
+      ).rowCount,
+      0,
+    );
+
+    // No actor context at all: zero visibility on both tables, no error.
+    assert.equal((await asActor(null, "SELECT * FROM aristo.tenant_settings")).rows.length, 0);
+    assert.equal((await asActor(null, "SELECT * FROM aristo.organizations")).rows.length, 0);
+  } finally {
+    await db.close();
+  }
+});
