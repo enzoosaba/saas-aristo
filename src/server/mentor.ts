@@ -1,5 +1,9 @@
-import { db } from "./db";
+import { db, transaction } from "./db";
 import { HttpError } from "./http";
+import {
+  ensureOrganizationMembership,
+  releaseOrganizationMembershipIfOrphaned,
+} from "./identity";
 import {
   isScheduled,
   type StudyItem,
@@ -132,15 +136,28 @@ export async function addStudent(mentorId: string, email: string) {
     throw new HttpError(400, "Você não pode se adicionar como aluno.");
   if (student.role !== "student")
     throw new HttpError(400, "Esta conta não é de um aluno.");
-  await connection
-    .prepare(
-      "INSERT OR IGNORE INTO mentor_students(mentor_id,student_id) VALUES(?,?)",
-    )
-    .run(mentorId, student.id);
+  // Fase 1C: the link and both sides' organization membership are created
+  // atomically — any failure rolls back the whole operation.
+  await transaction(async () => {
+    await connection
+      .prepare(
+        "INSERT OR IGNORE INTO mentor_students(mentor_id,student_id) VALUES(?,?)",
+      )
+      .run(mentorId, student.id);
+    await ensureOrganizationMembership(mentorId, "MENTOR");
+    await ensureOrganizationMembership(student.id, "STUDENT");
+  });
 }
 
 export async function removeStudent(mentorId: string, studentId: string) {
-  await db()
-    .prepare("DELETE FROM mentor_students WHERE mentor_id=? AND student_id=?")
-    .run(mentorId, studentId);
+  await transaction(async () => {
+    await db()
+      .prepare(
+        "DELETE FROM mentor_students WHERE mentor_id=? AND student_id=?",
+      )
+      .run(mentorId, studentId);
+    // Only release the student's organization membership if this was their
+    // last mentor_students link; a mentor is never released this way.
+    await releaseOrganizationMembershipIfOrphaned(studentId);
+  });
 }

@@ -149,6 +149,103 @@ try {
     ).status(),
     200,
   );
+
+  // Fase 1C: adding a student must atomically sync organization_members
+  // for both sides, using Tenant 01's default organization ("Turma
+  // Inicial"). Postgres-only, same as the rest of the SaaS foundation.
+  const membership = async (userId) =>
+    (
+      await admin(
+        "SELECT member_role, status FROM organization_members WHERE user_id=?",
+        [userId],
+      )
+    )[0];
+  if (pg) {
+    assert.deepEqual(await membership(mentor.user.id), {
+      member_role: "MENTOR",
+      status: "active",
+    });
+    assert.deepEqual(await membership(student.user.id), {
+      member_role: "STUDENT",
+      status: "active",
+    });
+
+    // adding the same student again must not duplicate either link
+    assert.equal(
+      (
+        await post(mentor, "/api/mentor", {
+          action: "add-student",
+          email: student.email,
+        })
+      ).status(),
+      200,
+    );
+    assert.equal(
+      Number(
+        (
+          await admin(
+            "SELECT count(*) AS total FROM organization_members WHERE user_id=?",
+            [student.user.id],
+          )
+        )[0].total,
+      ),
+      1,
+    );
+    assert.equal(
+      Number(
+        (
+          await admin(
+            "SELECT count(*) AS total FROM mentor_students WHERE mentor_id=? AND student_id=?",
+            [mentor.user.id, student.user.id],
+          )
+        )[0].total,
+      ),
+      1,
+    );
+
+    // a second mentor also links the same student, for the removal checks below
+    await admin("UPDATE users SET role='mentor' WHERE id=?", [other.user.id]);
+    assert.equal(
+      (
+        await post(other, "/api/mentor", {
+          action: "add-student",
+          email: student.email,
+        })
+      ).status(),
+      200,
+    );
+    assert.deepEqual(await membership(other.user.id), {
+      member_role: "MENTOR",
+      status: "active",
+    });
+
+    // roles incorretas são rejeitadas: the CHECK constraint on
+    // organization_members.member_role still protects the database even if
+    // application code ever tried something outside MENTOR/STUDENT. Uses a
+    // second, otherwise-unused organization so this only exercises the
+    // CHECK constraint, not the (organization_id,user_id) UNIQUE one.
+    const [tenantRow] = await admin(
+      "SELECT id FROM tenants WHERE slug='mentoria-coelho'",
+    );
+    await admin(
+      "INSERT INTO organizations(tenant_id,name) VALUES(?,?)",
+      [tenantRow.id, "Turma Secundária"],
+    );
+    const [otherOrgRow] = await admin(
+      "SELECT id FROM organizations WHERE name='Turma Secundária'",
+    );
+    await assert.rejects(
+      pg.query(
+        "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role) VALUES($1,$2,$3,'TENANT_ADMIN')",
+        [tenantRow.id, otherOrgRow.id, other.user.id],
+      ),
+      /check/i,
+    );
+  }
+
+  // Still 404 regardless of Postgres/organization sync above: this checks
+  // the mentor_students ownership link, which "other" was never added to
+  // (only promoted to mentor for the removal checks further down).
   assert.equal(
     (
       await mentor.ctx.request.get(
@@ -272,8 +369,69 @@ try {
     ).status(),
     404,
   );
+
+  if (pg) {
+    // "other" still links the student (added earlier): losing only the
+    // "mentor" link must not suspend the organization membership.
+    assert.deepEqual(await membership(student.user.id), {
+      member_role: "STUDENT",
+      status: "active",
+    });
+
+    // removing the last remaining link suspends the membership
+    assert.equal(
+      (
+        await post(other, "/api/mentor", {
+          action: "remove-student",
+          studentId: student.user.id,
+        })
+      ).status(),
+      200,
+    );
+    assert.deepEqual(await membership(student.user.id), {
+      member_role: "STUDENT",
+      status: "suspended",
+    });
+
+    // mentors are never released by removeStudent, with or without students left
+    assert.deepEqual(await membership(mentor.user.id), {
+      member_role: "MENTOR",
+      status: "active",
+    });
+    assert.deepEqual(await membership(other.user.id), {
+      member_role: "MENTOR",
+      status: "active",
+    });
+
+    // re-adding reactivates the suspended membership instead of duplicating
+    assert.equal(
+      (
+        await post(mentor, "/api/mentor", {
+          action: "add-student",
+          email: student.email,
+        })
+      ).status(),
+      200,
+    );
+    assert.deepEqual(await membership(student.user.id), {
+      member_role: "STUDENT",
+      status: "active",
+    });
+    assert.equal(
+      Number(
+        (
+          await admin(
+            "SELECT count(*) AS total FROM organization_members WHERE user_id=?",
+            [student.user.id],
+          )
+        )[0].total,
+      ),
+      1,
+    );
+  }
+
   console.log(
-    "Delivery: mentor permissions, valid dates, concurrent writes, recovery UI, one-time tokens, revocation, login and Tenant 01 identity sync passed.",
+    "Delivery: mentor permissions, valid dates, concurrent writes, recovery UI, one-time tokens, revocation, login, Tenant 01 identity sync and organization_members sync passed.",
   );
 } finally {
   await browser.close();
