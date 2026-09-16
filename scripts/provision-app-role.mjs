@@ -49,7 +49,11 @@ try {
   await client.query(
     `ALTER ROLE aristo_app WITH LOGIN PASSWORD '${password}'`,
   );
-  console.log("aristo_app: LOGIN habilitado, senha atualizada.");
+  // stderr, not stdout: --print-url mode's caller (test-postgres.mjs)
+  // captures stdout as the connection string verbatim — a status line
+  // mixed in there would corrupt it into an invalid URL. Human-run
+  // invocations still see this (it's piped to the terminal either way).
+  console.error("aristo_app: LOGIN habilitado, senha atualizada.");
 } finally {
   await client.end();
 }

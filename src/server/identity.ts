@@ -21,16 +21,31 @@ type OrganizationRole = "MENTOR" | "STUDENT";
 // Tenant 01's single default organization, seeded by migration
 // 202609150006. Resolved by name every call rather than cached: cheap,
 // and correct even if that migration is ever re-run in a fresh environment.
+//
+// Fase 3B part 7: caught by a real smoke test against Supabase with RLS
+// actually enforced, not by reasoning about it — a plain join of
+// organizations to tenants requires the caller to already pass
+// tenants_select's policy (is_platform_admin() OR is_tenant_member(id)),
+// which a genuinely brand-new registrant never does yet (that's what this
+// call is helping to establish). Routed through
+// aristo.default_organization() under Postgres, a SECURITY DEFINER
+// function for exactly this chicken-and-egg reason (same shape as
+// has_mentor_role/student_has_any_mentor_link). SQLite has no RLS to
+// route around, so it keeps the original join.
 async function defaultOrganization() {
-  const org = (await db()
-    .prepare(
-      `SELECT o.id AS organization_id, o.tenant_id AS tenant_id
-       FROM organizations o JOIN tenants t ON t.id = o.tenant_id
-       WHERE t.slug=? AND o.name=?`,
-    )
-    .get(TENANT_01_SLUG, DEFAULT_ORGANIZATION_NAME)) as
-    | { organization_id: string; tenant_id: string }
-    | undefined;
+  const org = (
+    isPostgres()
+      ? await db()
+          .prepare("SELECT * FROM aristo.default_organization()")
+          .get()
+      : await db()
+          .prepare(
+            `SELECT o.id AS organization_id, o.tenant_id AS tenant_id
+             FROM organizations o JOIN tenants t ON t.id = o.tenant_id
+             WHERE t.slug=? AND o.name=?`,
+          )
+          .get(TENANT_01_SLUG, DEFAULT_ORGANIZATION_NAME)
+  ) as { organization_id: string; tenant_id: string } | undefined;
   if (!org)
     throw new HttpError(
       500,
@@ -84,9 +99,15 @@ export async function syncTenantMembership(
   role: User["role"],
 ) {
   if (!isPostgres()) return;
+  // Fase 3B part 7: same reason as defaultOrganization() below — a plain
+  // `SELECT id FROM tenants WHERE slug=?` needs tenants_select's policy to
+  // pass, which a brand-new registrant never does yet. Routed through the
+  // same aristo.default_organization() SECURITY DEFINER function (it
+  // returns tenant_id too, so no separate function is needed just for
+  // this one column).
   const tenant = (await db()
-    .prepare("SELECT id FROM tenants WHERE slug=?")
-    .get(TENANT_01_SLUG)) as { id: string } | undefined;
+    .prepare("SELECT tenant_id AS id FROM aristo.default_organization()")
+    .get()) as { id: string } | undefined;
   // Tenant 01 is seeded by migration 202609150004 and must exist; treat its
   // absence as a hard failure so registration rolls back loudly instead of
   // silently producing a user with no tenant membership.

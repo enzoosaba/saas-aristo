@@ -16,6 +16,17 @@ const server = spawn(process.execPath, ["scripts/start.mjs"], {
     DATABASE_PATH: databasePath,
     DATABASE_URL: testDatabaseUrl,
     RESEND_API_KEY: "",
+    // Fase 3B part 7: scripts/start.mjs unconditionally loads .env.local
+    // (process.loadEnvFile only fills in keys not already present in
+    // process.env) — without an explicit value here, a real
+    // APP_DATABASE_URL sitting in .env.local (e.g. from
+    // pnpm db:provision-app-role) would silently leak into every e2e run
+    // and point database.ts's pool() at the real database instead of this
+    // disposable one, defeating the whole point of an isolated test.
+    // test-postgres.mjs passes its own APP_DATABASE_URL explicitly when it
+    // wants the aristo_app pass; every other caller gets "" (falls back to
+    // DATABASE_URL, i.e. plain SQLite/e2e or the disposable Postgres).
+    APP_DATABASE_URL: process.env.APP_DATABASE_URL || "",
   },
 });
 try {

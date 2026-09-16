@@ -36,11 +36,19 @@ jobs:
     env:
       DATABASE_URL: postgresql://aristo:ci-only-password@localhost:5432/aristo_test
       TEST_DATABASE_URL: postgresql://aristo:ci-only-password@localhost:5432/aristo_test
-      # Fase 3B part 6: this whole Postgres service is destroyed at the end
-      # of the job, same as DATABASE_URL above — a fixed, plainly-visible
-      # password here carries the same (non-)risk as aristo's own. Not used
-      # by any runtime code yet (that's part 7); provisioned so the script
-      # that does this against the real database is exercised here too.
+      # Fase 3B part 6/7: this whole Postgres service is destroyed at the
+      # end of the job, same as DATABASE_URL above — a fixed,
+      # plainly-visible password here carries the same (non-)risk as
+      # aristo's own. Since database.ts's pool() now prefers
+      # APP_DATABASE_URL when it's set (part 7), this job's test:e2e run
+      # below connects as aristo_app for real, with a real Postgres service
+      # that actually authenticates connections (unlike the disposable
+      # PGlite instance scripts/test-postgres.mjs uses locally, which was
+      # found — the hard way, via a bug this gap let through — to accept
+      # any username/password as the owning role regardless of what's
+      # supplied). This job is therefore the one automated, permanent
+      # check that RLS is genuinely enforced end to end, not just that the
+      # app's code path doesn't crash when APP_DATABASE_URL is set.
       APP_DATABASE_URL: postgresql://aristo_app:ciOnlyAppPassword2026@localhost:5432/aristo_test
     steps:
       - uses: actions/checkout@v4

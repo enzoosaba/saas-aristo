@@ -71,14 +71,36 @@ await withDisposablePostgres(async (url) => {
   );
 });
 
-// Fase 3B part 7 (cutover) validation: the same full delivery/e2e suite,
-// against its own fresh database, but with the app itself connecting as
-// aristo_app (RLS-restricted) instead of the owning role — this is what
-// actually proves the cutover is safe, not just that each policy compiles
-// in isolation (tests/postgres.test.mjs) or that the app works when RLS is
-// a no-op (the pass above). provision-app-role.mjs's --print-url mode
-// generates a throwaway password for this disposable database and never
-// touches .env.local.
+// Fase 3B part 7: the same full delivery/e2e suite, against its own fresh
+// database, with the app configured to prefer APP_DATABASE_URL — this
+// proves the env-var switch and the app's own code path don't crash when
+// APP_DATABASE_URL is set, and that provision-app-role.mjs's plumbing
+// works end to end.
+//
+// It does NOT prove RLS is actually enforced, and must never be reported
+// as if it did — verified empirically (not assumed) that
+// @electric-sql/pglite-socket's PGLiteSocketServer does not authenticate
+// connections at all: a client can supply a totally nonexistent
+// username/password and it's accepted anyway, always as the underlying
+// PGlite instance's owner. Every RLS *policy* test in
+// tests/postgres.test.mjs is unaffected by this — those use SET ROLE
+// inside an already-open, in-process PGlite connection (a real, correctly
+// implemented Postgres privilege mechanism), never a second
+// password-authenticated connection. But this specific pass — a fresh
+// TCP/password-authenticated connection claiming to be aristo_app — is
+// silently treated as the owning role underneath, regardless of the
+// credential supplied, so it can't catch an RLS regression a genuine
+// aristo_app connection would.
+//
+// The one real bug this exact gap let through: a smoke test against the
+// live Supabase database (which does authenticate for real) found that
+// tenants_select blocked every fresh registrant from discovering Tenant
+// 01's id, breaking every registration outright — this pass here reported
+// "safe to cut over" the whole time regardless, because it was never
+// actually testing under RLS. Fixed in migration 202609160019; this pass
+// stays as a smoke test for the plumbing, not a substitute for testing
+// against a real, authenticating Postgres (the live database, or CI's
+// postgres job below, which uses a real postgres:17 Docker service).
 await withDisposablePostgres(async (url) => {
   await run(url, "scripts/migrate-postgres.mjs");
   const appDatabaseUrl = await runCaptured(
@@ -92,6 +114,6 @@ await withDisposablePostgres(async (url) => {
     APP_DATABASE_URL: appDatabaseUrl,
   });
   console.log(
-    "PostgreSQL local (as aristo_app/RLS-restricted): browser flows passed — safe to cut over.",
+    "PostgreSQL local (APP_DATABASE_URL plumbing smoke test — does NOT prove RLS enforcement, see comment above): browser flows passed.",
   );
 });

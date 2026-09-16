@@ -2224,14 +2224,31 @@ test("Fase 3B RLS batch 8: profiles enforces self-only access (the table missed 
 test("Fase 3B pre-cutover: the real registration sequence completes end-to-end as aristo_app", async () => {
   const db = new PGlite();
   try {
-    const { tenantAId, orgAId } = await buildTwoTenantFixture(db);
+    const { tenantAId, orgAId, asActor } = await buildTwoTenantFixture(db);
+
+    // A genuinely fresh actor cannot see Tenant 01/its default organization
+    // via a plain SELECT — this is the actual bug found by a real smoke
+    // test against Supabase: tenants_select requires is_platform_admin() OR
+    // is_tenant_member(id), which a brand-new registrant is neither yet.
+    // The first version of this test used tenantAId/orgAId directly
+    // (already known from the fixture's own owner-level setup) and so
+    // never exercised this lookup at all — which is exactly how this bug
+    // went unnoticed by this suite in the first place.
+    assert.equal(
+      (await asActor("fresh-registrant", "SELECT 1 FROM aristo.tenants WHERE slug='mentoria-coelho'"))
+        .rows.length,
+      0,
+      "um registrante recém-criado não deveria conseguir ver a linha de tenants diretamente",
+    );
 
     // Mirrors auth/route.ts's register handler + identity.ts's
     // createProfile/syncTenantMembership/ensureOrganizationMembership,
     // statement for statement, in one transaction, as aristo_app — not
     // just each policy in isolation. This is the exact sequence that would
-    // have broken outright post-cutover with profiles left unpoliced: a
-    // single failing INSERT here rolls back the whole account.
+    // have broken outright post-cutover with profiles left unpoliced (batch
+    // 8) or with tenants/organizations undiscoverable by a fresh actor
+    // (this fix): a single failing statement here rolls back the whole
+    // account.
     await db.exec("BEGIN");
     await db.exec("SET ROLE aristo_app");
     try {
@@ -2242,17 +2259,24 @@ test("Fase 3B pre-cutover: the real registration sequence completes end-to-end a
       await db.query(
         "INSERT INTO aristo.profiles(user_id,full_name,avatar_url) VALUES('fresh-registrant','Fresh Registrant',NULL)",
       );
+      // Discovers tenant_id via aristo.default_organization(), exactly
+      // like identity.ts's syncTenantMembership() now does — not via a
+      // pre-known id from the fixture.
+      const { rows: [{ tenant_id: discoveredTenantId, organization_id: discoveredOrgId }] } =
+        await db.query("SELECT * FROM aristo.default_organization()");
+      assert.equal(discoveredTenantId, tenantAId);
+      assert.equal(discoveredOrgId, orgAId);
       await db.query(
         `INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES($1,'fresh-registrant','STUDENT')
          ON CONFLICT(tenant_id,user_id) DO UPDATE SET role=excluded.role, updated_at=now()`,
-        [tenantAId],
+        [discoveredTenantId],
       );
       await db.query(
         `INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role,status)
          VALUES($1,$2,'fresh-registrant','STUDENT','active')
          ON CONFLICT(organization_id,user_id) DO UPDATE
            SET member_role=excluded.member_role, status='active', updated_at=now()`,
-        [tenantAId, orgAId],
+        [discoveredTenantId, discoveredOrgId],
       );
       await db.exec("COMMIT");
     } catch (e) {
