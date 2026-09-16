@@ -173,10 +173,15 @@ export async function releaseOrganizationMembershipIfOrphaned(
   studentId: string,
 ) {
   if (!isPostgres()) return;
+  // Fase 3B part 5, batch 7: must see a link to *any* mentor, not just the
+  // one who just removed their own — a self-scoped mentor_students SELECT
+  // policy would hide other mentors' links here. Routed through
+  // aristo.student_has_any_mentor_link(), a SECURITY DEFINER function, for
+  // the same reason batch 4's has_mentor_role exists.
   const stillLinked = await db()
-    .prepare("SELECT 1 FROM mentor_students WHERE student_id=? LIMIT 1")
+    .prepare("SELECT aristo.student_has_any_mentor_link(?) AS linked")
     .get(studentId);
-  if (stillLinked) return;
+  if ((stillLinked as { linked: boolean } | undefined)?.linked) return;
   const { organization_id } = await defaultOrganization();
   await db()
     .prepare(

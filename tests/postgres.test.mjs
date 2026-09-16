@@ -1909,3 +1909,220 @@ test("Fase 3B RLS batch 6: sessions and password_resets work as token-possession
     await db.close();
   }
 });
+
+test("Fase 3B RLS batch 7: mentor_students enforces mentor-scoped access, student_has_any_mentor_link sees across mentors", async () => {
+  const db = new PGlite();
+  try {
+    const { asActor, asOwner } = await buildTwoTenantFixture(db);
+
+    // --- SELECT: mentor_id = self only — no student-side raw read exists
+    // in the app, so none is granted.
+    assert.equal(
+      (await asActor("mentor-a", "SELECT 1 FROM aristo.mentor_students WHERE mentor_id='mentor-a' AND student_id='student-a'"))
+        .rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("student-a", "SELECT 1 FROM aristo.mentor_students WHERE student_id='student-a'"))
+        .rows.length,
+      0,
+      "não existe leitura direta pelo lado do aluno na aplicação",
+    );
+    assert.equal(
+      (await asActor("mentor-b", "SELECT 1 FROM aristo.mentor_students WHERE mentor_id='mentor-a'"))
+        .rows.length,
+      0,
+    );
+    assert.equal(
+      (await asActor("platform-admin", "SELECT 1 FROM aristo.mentor_students WHERE mentor_id='mentor-a'"))
+        .rows.length,
+      1,
+    );
+
+    // --- INSERT: mentor_id = self only (addStudent's own pattern).
+    await db.exec(
+      "INSERT INTO aristo.users(id,name,email,password,role,created_at) VALUES('fresh-student-2','Fresh2','fresh2@example.test','x','student',0)",
+    );
+    await asActor(
+      "mentor-a",
+      "INSERT INTO aristo.mentor_students(mentor_id,student_id) VALUES('mentor-a','fresh-student-2')",
+    );
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.mentor_students WHERE mentor_id='mentor-a' AND student_id='fresh-student-2'"))
+        .rows.length,
+      1,
+    );
+    await assert.rejects(
+      asActor(
+        "mentor-b",
+        "INSERT INTO aristo.mentor_students(mentor_id,student_id) VALUES('mentor-a','fresh-student-2') ON CONFLICT DO NOTHING",
+      ),
+      /row-level security/i,
+      "mentor-b não pode criar um vínculo em nome de mentor-a",
+    );
+
+    // --- DELETE: mentor_id = self only — mentor-b can't touch mentor-a's
+    // link (silent 0 rows, USING excludes it outright), mentor-a can
+    // delete their own.
+    assert.equal(
+      (await asActor("mentor-b", "DELETE FROM aristo.mentor_students WHERE mentor_id='mentor-a' AND student_id='fresh-student-2'"))
+        .rowCount,
+      0,
+    );
+    await asActor("mentor-a", "DELETE FROM aristo.mentor_students WHERE mentor_id='mentor-a' AND student_id='fresh-student-2'");
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.mentor_students WHERE mentor_id='mentor-a' AND student_id='fresh-student-2'"))
+        .rows.length,
+      0,
+    );
+
+    // --- UPDATE: no real path — admin-only default.
+    assert.equal(
+      (await asActor("mentor-a", "UPDATE aristo.mentor_students SET student_id='student-a' WHERE mentor_id='mentor-a' AND student_id='student-a'"))
+        .rowCount,
+      0,
+    );
+
+    // --- student_has_any_mentor_link: the actual bug this batch fixes.
+    // student-a starts linked only to mentor-a (fixture). Link a second
+    // mentor, then remove mentor-a's own link — the function must still
+    // see mentor-b's link, which a mentor_id-scoped SELECT policy alone
+    // could never show mentor-a.
+    await asOwner("INSERT INTO aristo.mentor_students(mentor_id,student_id) VALUES('mentor-b','student-a')");
+    await asActor("mentor-a", "DELETE FROM aristo.mentor_students WHERE mentor_id='mentor-a' AND student_id='student-a'");
+    assert.equal(
+      (await asActor(null, "SELECT aristo.student_has_any_mentor_link($1) AS linked", ["student-a"]))
+        .rows[0].linked,
+      true,
+      "student-a ainda está vinculado a mentor-b",
+    );
+    await asActor("mentor-b", "DELETE FROM aristo.mentor_students WHERE mentor_id='mentor-b' AND student_id='student-a'");
+    assert.equal(
+      (await asActor(null, "SELECT aristo.student_has_any_mentor_link($1) AS linked", ["student-a"]))
+        .rows[0].linked,
+      false,
+      "nenhum mentor mais vinculado a student-a",
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("Fase 3B RLS batch 7: rate_limits is fully open to aristo_app (no per-user data, pre-auth writes)", async () => {
+  const db = new PGlite();
+  try {
+    const { asActor } = await buildTwoTenantFixture(db);
+    const now = Date.now();
+
+    // No actor at all — exactly how http.ts's limit() runs pre-auth.
+    const first = await asActor(
+      null,
+      "INSERT INTO aristo.rate_limits(key,hits,until) VALUES('k1',1,$1) ON CONFLICT(key) DO UPDATE SET hits=aristo.rate_limits.hits+1 RETURNING hits",
+      [now + 60000],
+    );
+    assert.equal(Number(first.rows[0].hits), 1);
+    // The real conflict-update path, still with no actor: this is the
+    // reason UPDATE can't default to admin-only here.
+    const second = await asActor(
+      null,
+      "INSERT INTO aristo.rate_limits(key,hits,until) VALUES('k1',1,$1) ON CONFLICT(key) DO UPDATE SET hits=aristo.rate_limits.hits+1 RETURNING hits",
+      [now + 60000],
+    );
+    assert.equal(Number(second.rows[0].hits), 2);
+
+    await asActor(
+      null,
+      "INSERT INTO aristo.rate_limits(key,hits,until) VALUES('k-expired',1,$1)",
+      [now - 1000],
+    );
+    await asActor(null, "DELETE FROM aristo.rate_limits WHERE until < $1", [now]);
+    assert.equal(
+      (await asActor(null, "SELECT 1 FROM aristo.rate_limits WHERE key='k-expired'")).rows.length,
+      0,
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("Fase 3B RLS batch 7: demo_batches (self SELECT, admin-only writes) and audit_logs (admin-only everything)", async () => {
+  const db = new PGlite();
+  try {
+    const { asActor, asOwner } = await buildTwoTenantFixture(db);
+
+    // --- demo_batches
+    await asOwner("INSERT INTO aristo.demo_batches(user_id,created_at) VALUES('student-a', now())");
+    assert.equal(
+      (await asActor("student-a", "SELECT 1 FROM aristo.demo_batches WHERE user_id='student-a'")).rows
+        .length,
+      1,
+    );
+    assert.equal(
+      (await asActor("mentor-a", "SELECT 1 FROM aristo.demo_batches WHERE user_id='student-a'")).rows
+        .length,
+      0,
+    );
+    assert.equal(
+      (await asActor("platform-admin", "SELECT 1 FROM aristo.demo_batches WHERE user_id='student-a'"))
+        .rows.length,
+      1,
+    );
+    await assert.rejects(
+      asActor(
+        "student-b",
+        "INSERT INTO aristo.demo_batches(user_id,created_at) VALUES('student-b', now())",
+      ),
+      /row-level security/i,
+      "nenhum caminho confirmado insere demo_batches via aristo_app — nem o próprio usuário",
+    );
+    await asActor(
+      "platform-admin",
+      "INSERT INTO aristo.demo_batches(user_id,created_at) VALUES('student-b', now())",
+    );
+    assert.equal(
+      (await asActor("student-b", "DELETE FROM aristo.demo_batches WHERE user_id='student-b'"))
+        .rowCount,
+      0,
+    );
+    await asActor("platform-admin", "DELETE FROM aristo.demo_batches WHERE user_id='student-b'");
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.demo_batches WHERE user_id='student-b'")).rows.length,
+      0,
+    );
+
+    // --- audit_logs: admin-only on every command, nothing else touches it.
+    await asOwner(
+      "INSERT INTO aristo.audit_logs(action,entity_type) VALUES('test.action','test')",
+    );
+    assert.equal(
+      (await asActor("platform-admin", "SELECT 1 FROM aristo.audit_logs WHERE action='test.action'"))
+        .rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("mentor-a", "SELECT 1 FROM aristo.audit_logs WHERE action='test.action'")).rows
+        .length,
+      0,
+    );
+    await assert.rejects(
+      asActor(
+        "mentor-a",
+        "INSERT INTO aristo.audit_logs(action,entity_type) VALUES('forged','test')",
+      ),
+      /row-level security/i,
+    );
+    assert.equal(
+      (
+        await asActor("mentor-a", "DELETE FROM aristo.audit_logs WHERE action='test.action'")
+      ).rowCount,
+      0,
+    );
+    await asActor("platform-admin", "DELETE FROM aristo.audit_logs WHERE action='test.action'");
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.audit_logs WHERE action='test.action'")).rows.length,
+      0,
+    );
+  } finally {
+    await db.close();
+  }
+});
