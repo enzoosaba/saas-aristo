@@ -1248,3 +1248,236 @@ test("Fase 3B RLS batch 3: records enforces isolation as aristo_app", async () =
     await db.close();
   }
 });
+
+test("Fase 3B RLS batch 4: tenant_members enforces isolation as aristo_app", async () => {
+  const db = new PGlite();
+  try {
+    const { tenantAId, tenantBId, asActor, asOwner } = await buildTwoTenantFixture(db);
+
+    // Confirmed real path: a brand-new user self-inserts as STUDENT.
+    await db.exec(
+      "INSERT INTO aristo.users(id,name,email,password,role,created_at) VALUES('fresh-student','Fresh','fresh@example.test','x','student',0)",
+    );
+    await asActor(
+      "fresh-student",
+      "INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES($1,'fresh-student','STUDENT')",
+      [tenantAId],
+    );
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.tenant_members WHERE tenant_id=$1 AND user_id='fresh-student'", [tenantAId])).rows.length,
+      1,
+    );
+
+    // No confirmed path self-inserts as MENTOR or TENANT_ADMIN — must be
+    // rejected regardless of the requester's own users.role.
+    await assert.rejects(
+      asActor(
+        "fresh-student",
+        "INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES($1,'fresh-student','TENANT_ADMIN') ON CONFLICT (tenant_id,user_id) DO NOTHING",
+        [tenantBId],
+      ),
+      /row-level security/i,
+    );
+    await assert.rejects(
+      asActor(
+        "mentor-a",
+        "INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES($1,'mentor-a','MENTOR') ON CONFLICT (tenant_id,user_id) DO UPDATE SET role='MENTOR'",
+        [tenantBId],
+      ),
+      /row-level security/i,
+      "mentor-a já é MENTOR no Tenant A, mas isso não autoriza se auto-inserir como MENTOR no Tenant B",
+    );
+
+    // Self, platform admin and this tenant's admin can all see the row;
+    // Tenant B's own admin cannot.
+    assert.equal(
+      (await asActor("fresh-student", "SELECT 1 FROM aristo.tenant_members WHERE user_id='fresh-student'")).rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("tenant-admin-a", "SELECT 1 FROM aristo.tenant_members WHERE user_id='fresh-student'")).rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("tenant-admin-b", "SELECT 1 FROM aristo.tenant_members WHERE user_id='fresh-student'")).rows.length,
+      0,
+    );
+
+    // Only admin can update/delete membership rows.
+    assert.equal(
+      (
+        await asActor(
+          "mentor-a",
+          "UPDATE aristo.tenant_members SET role='TENANT_ADMIN' WHERE user_id='fresh-student'",
+        )
+      ).rowCount,
+      0,
+    );
+    await asActor(
+      "tenant-admin-a",
+      "UPDATE aristo.tenant_members SET status='suspended' WHERE user_id='fresh-student'",
+    );
+    assert.equal(
+      (await asOwner("SELECT status FROM aristo.tenant_members WHERE user_id='fresh-student'")).rows[0].status,
+      "suspended",
+    );
+    assert.equal(
+      (await asActor("mentor-a", "DELETE FROM aristo.tenant_members WHERE user_id='fresh-student'")).rowCount,
+      0,
+    );
+    await asActor("platform-admin", "DELETE FROM aristo.tenant_members WHERE user_id='fresh-student'");
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.tenant_members WHERE user_id='fresh-student'")).rows.length,
+      0,
+    );
+
+    assert.equal((await asActor(null, "SELECT * FROM aristo.tenant_members")).rows.length, 0);
+  } finally {
+    await db.close();
+  }
+});
+
+test("Fase 3B RLS batch 4: organization_members enforces isolation, self-promotion is rejected", async () => {
+  const db = new PGlite();
+  try {
+    const { tenantAId, orgAId, tenantBId, orgBId, asActor, asOwner } =
+      await buildTwoTenantFixture(db);
+
+    await db.exec(`
+      INSERT INTO aristo.users(id,name,email,password,role,created_at) VALUES
+        ('fresh-student','Fresh','fresh@example.test','x','student',0),
+        ('fresh-mentor','FreshMentor','freshmentor@example.test','x','mentor',0);
+    `);
+    await db.query(
+      "INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES($1,'fresh-student','STUDENT'),($1,'fresh-mentor','MENTOR')",
+      [tenantAId],
+    );
+
+    // --- The critical negative case: a plain student cannot self-insert
+    // as MENTOR in any organization, including one they're not even a
+    // member of.
+    await assert.rejects(
+      asActor(
+        "fresh-student",
+        "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role) VALUES($1,$2,'fresh-student','MENTOR')",
+        [tenantAId, orgAId],
+      ),
+      /row-level security/i,
+      "aluno comum não pode se auto-inserir como MENTOR",
+    );
+    await assert.rejects(
+      asActor(
+        "student-a",
+        "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role) VALUES($1,$2,'student-a','MENTOR') ON CONFLICT (organization_id,user_id) DO UPDATE SET member_role='MENTOR'",
+        [tenantAId, orgAId],
+      ),
+      /row-level security/i,
+      "student-a já é membro de orgA como STUDENT — mesmo assim não pode virar MENTOR sozinho",
+    );
+
+    // --- The legitimate path: a user whose users.role already says
+    // 'mentor' CAN self-insert as MENTOR (this is exactly what addStudent's
+    // very first call does, before is_organization_mentor() could ever be
+    // true for them).
+    await asActor(
+      "fresh-mentor",
+      "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role) VALUES($1,$2,'fresh-mentor','MENTOR')",
+      [tenantAId, orgAId],
+    );
+    assert.equal(
+      (await asOwner("SELECT member_role FROM aristo.organization_members WHERE user_id='fresh-mentor'")).rows[0].member_role,
+      "MENTOR",
+    );
+
+    // --- Re-upsert of the mentor's own row (ensureOrganizationMembership's
+    // ON CONFLICT DO UPDATE, exercised on a mentor's *second* addStudent
+    // call) must keep working.
+    await asActor(
+      "fresh-mentor",
+      "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role,status) VALUES($1,$2,'fresh-mentor','MENTOR','active') ON CONFLICT (organization_id,user_id) DO UPDATE SET status='active', updated_at=now()",
+      [tenantAId, orgAId],
+    );
+
+    // --- A mentor inserting a STUDENT row on someone else's behalf
+    // (addStudent) is the confirmed real path.
+    await asActor(
+      "fresh-mentor",
+      "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role) VALUES($1,$2,'fresh-student','STUDENT')",
+      [tenantAId, orgAId],
+    );
+    assert.equal(
+      (await asOwner("SELECT member_role FROM aristo.organization_members WHERE user_id='fresh-student'")).rows[0].member_role,
+      "STUDENT",
+    );
+
+    // --- But that same mentor cannot use UPDATE to promote that student
+    // to MENTOR — the other half of the escalation guard. USING *does*
+    // see this row (fresh-mentor is this org's mentor, and the row is
+    // currently STUDENT), so the rejection is a thrown WITH CHECK
+    // violation, not a silent 0-row update — unlike the student's own
+    // attempt below, which USING excludes outright.
+    await assert.rejects(
+      asActor(
+        "fresh-mentor",
+        "UPDATE aristo.organization_members SET member_role='MENTOR' WHERE user_id='fresh-student'",
+      ),
+      /row-level security/i,
+      "mentor não pode promover o próprio aluno a MENTOR via UPDATE",
+    );
+    // --- Nor can the student promote themselves via UPDATE — here USING
+    // itself excludes the row (fresh-student is not this org's mentor and
+    // has no self-as-MENTOR clause while member_role is still STUDENT),
+    // so this one *is* a silent 0-row update, not a rejection.
+    assert.equal(
+      (
+        await asActor(
+          "fresh-student",
+          "UPDATE aristo.organization_members SET member_role='MENTOR' WHERE user_id='fresh-student'",
+        )
+      ).rowCount,
+      0,
+      "aluno não pode se autopromover via UPDATE",
+    );
+    // The legitimate mentor operation on a student's row (suspend) still works.
+    await asActor(
+      "fresh-mentor",
+      "UPDATE aristo.organization_members SET status='suspended' WHERE user_id='fresh-student'",
+    );
+    assert.equal(
+      (await asOwner("SELECT status FROM aristo.organization_members WHERE user_id='fresh-student'")).rows[0].status,
+      "suspended",
+    );
+
+    // --- Visibility: platform admin, tenant admin and the org's own
+    // mentor all see the roster; Tenant B's accounts see nothing.
+    assert.equal(
+      (await asActor("tenant-admin-a", "SELECT 1 FROM aristo.organization_members WHERE user_id='fresh-student'")).rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor("mentor-a", "SELECT 1 FROM aristo.organization_members WHERE user_id='fresh-student'")).rows.length,
+      1,
+      "mentor-a é mentor da mesma organização (Turma Inicial)",
+    );
+    for (const outsider of ["mentor-b", "tenant-admin-b", "student-b"])
+      assert.equal(
+        (await asActor(outsider, "SELECT 1 FROM aristo.organization_members WHERE user_id='fresh-student'")).rows.length,
+        0,
+      );
+
+    // --- No confirmed DELETE path — admin only.
+    assert.equal(
+      (await asActor("mentor-a", "DELETE FROM aristo.organization_members WHERE user_id='fresh-student'")).rowCount,
+      0,
+    );
+    await asActor("platform-admin", "DELETE FROM aristo.organization_members WHERE user_id='fresh-student'");
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.organization_members WHERE user_id='fresh-student'")).rows.length,
+      0,
+    );
+
+    assert.equal((await asActor(null, "SELECT * FROM aristo.organization_members")).rows.length, 0);
+  } finally {
+    await db.close();
+  }
+});
