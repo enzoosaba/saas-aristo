@@ -10,7 +10,11 @@ import {
 } from "@/server/auth";
 import { db, transaction } from "@/server/db";
 import { body, failure, HttpError, json, limit } from "@/server/http";
-import { createProfile, syncTenantMembership } from "@/server/identity";
+import {
+  createProfile,
+  ensureOrganizationMembership,
+  syncTenantMembership,
+} from "@/server/identity";
 export const runtime = "nodejs";
 const credentials = z
   .object({
@@ -94,6 +98,12 @@ export async function POST(request: Request) {
           );
         await createProfile(id, name, null);
         await syncTenantMembership(id, "student");
+        // Fase 2 prerequisite: every account needs an active organization
+        // membership to create study data once tenant_id/organization_id
+        // become required (see resolveUserScope in identity.ts) — without
+        // this, a student who registers but is never added by a mentor
+        // would be unable to use the app at all from day one.
+        await ensureOrganizationMembership(id, "STUDENT");
       });
       await createSession(id);
       return json({ ok: true }, 201);

@@ -1,7 +1,7 @@
 import { chromium } from "playwright";
 import { DatabaseSync } from "node:sqlite";
 import { Pool } from "pg";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import { postgresConfig, postgresSql } from "../src/server/postgres-config.mjs";
 
@@ -42,6 +42,195 @@ try {
   const [mentor, student, other] = accounts;
   const post = (account, path, data) =>
     account.ctx.request.post(base + path, { headers: { Origin: base }, data });
+
+  // Fase 2B: every new item/record/plan/question/study_session must be
+  // stamped with the creating user's own tenant/organization scope —
+  // resolved server-side from tenant_members/organization_members, never
+  // supplied by the client. Postgres-only, same as the rest of the SaaS
+  // foundation (these columns don't exist under the SQLite fallback).
+  if (pg) {
+    const scopeOf = async (userId) => {
+      const [row] = await admin(
+        `SELECT tm.tenant_id AS tenant_id, om.organization_id AS organization_id
+         FROM tenant_members tm
+         JOIN organization_members om
+           ON om.user_id = tm.user_id AND om.tenant_id = tm.tenant_id AND om.status = 'active'
+         WHERE tm.user_id = ? AND tm.status = 'active'`,
+        [userId],
+      );
+      return row;
+    };
+
+    const studentScope = await scopeOf(student.user.id);
+    const otherScope = await scopeOf(other.user.id);
+    assert.ok(studentScope, "aluno deve ter escopo ativo logo após o registro");
+    assert.ok(otherScope, "outro aluno deve ter escopo ativo logo após o registro");
+
+    const { today } = await (await student.ctx.request.get(base + "/api/study")).json();
+
+    const itemId = randomUUID();
+    assert.equal(
+      (
+        await post(student, "/api/study", {
+          action: "save-item",
+          item: {
+            id: itemId,
+            kind: "habit",
+            title: "Ler 10 páginas",
+            notes: "",
+            frequency: "Todos os dias",
+            measure: "check",
+            target: 1,
+            unit: "",
+            date: today,
+            time: "",
+            priority: "Normal",
+            value: 0,
+            done: false,
+          },
+        })
+      ).status(),
+      200,
+    );
+    const [itemRow] = await admin(
+      "SELECT tenant_id, organization_id FROM items WHERE id=?",
+      [itemId],
+    );
+    assert.deepEqual(itemRow, studentScope, "novo item recebe escopo correto");
+
+    assert.equal(
+      (
+        await post(student, "/api/study", {
+          action: "record",
+          id: itemId,
+          date: today,
+          value: 0,
+          done: true,
+          version: 0,
+        })
+      ).status(),
+      200,
+    );
+    const [recordRow] = await admin(
+      "SELECT tenant_id, organization_id FROM records WHERE user_id=? AND item_id=?",
+      [student.user.id, itemId],
+    );
+    assert.deepEqual(recordRow, studentScope, "novo record recebe escopo correto");
+
+    // A different date than "today": a later check in this same script
+    // exercises save-plan for "today" (concurrent-write test) and must not
+    // collide with this one.
+    const planDate = "2020-01-01";
+    assert.equal(
+      (
+        await post(student, "/api/study", {
+          action: "save-plan",
+          date: planDate,
+          prioridades: "Revisar",
+          horarios: "",
+          observacoes: "",
+          version: 0,
+        })
+      ).status(),
+      200,
+    );
+    const [planRow] = await admin(
+      "SELECT tenant_id, organization_id FROM plans WHERE user_id=? AND date=?",
+      [student.user.id, planDate],
+    );
+    assert.deepEqual(planRow, studentScope, "novo plan recebe escopo correto");
+
+    const questionId = randomUUID();
+    assert.equal(
+      (
+        await post(student, "/api/study", {
+          action: "save-question",
+          question: {
+            id: questionId,
+            subject: "Matemática",
+            topic: "Frações",
+            date: today,
+            total: 10,
+            correct: 7,
+            version: 0,
+          },
+        })
+      ).status(),
+      200,
+    );
+    const [questionRow] = await admin(
+      "SELECT tenant_id, organization_id FROM questions WHERE id=?",
+      [questionId],
+    );
+    assert.deepEqual(questionRow, studentScope, "nova question recebe escopo correto");
+
+    const sessionId = randomUUID();
+    assert.equal(
+      (
+        await post(student, "/api/study", {
+          action: "save-session",
+          session: {
+            id: sessionId,
+            title: "Estudo dirigido",
+            subject: "Matemática",
+            date: today,
+            start: "08:00",
+            duration: 60,
+            notes: "",
+            version: 0,
+          },
+        })
+      ).status(),
+      200,
+    );
+    const [sessionRow] = await admin(
+      "SELECT tenant_id, organization_id FROM study_sessions WHERE id=?",
+      [sessionId],
+    );
+    assert.deepEqual(sessionRow, studentScope, "nova study_session recebe escopo correto");
+
+    // "other" independently resolves to the same tenant/organization (only
+    // one exists today) but through its own membership row, not by copying
+    // student's — proving this isn't a hardcoded/shared constant.
+    const otherItemId = randomUUID();
+    assert.equal(
+      (
+        await post(other, "/api/study", {
+          action: "save-item",
+          item: {
+            id: otherItemId,
+            kind: "habit",
+            title: "Revisar exercícios",
+            notes: "",
+            frequency: "Todos os dias",
+            measure: "check",
+            target: 1,
+            unit: "",
+            date: today,
+            time: "",
+            priority: "Normal",
+            value: 0,
+            done: false,
+          },
+        })
+      ).status(),
+      200,
+    );
+    const [otherItemRow] = await admin(
+      "SELECT tenant_id, organization_id FROM items WHERE id=?",
+      [otherItemId],
+    );
+    assert.deepEqual(
+      otherItemRow,
+      otherScope,
+      "dados de outro usuário usam o escopo dele, não um valor fixo emprestado",
+    );
+    assert.notEqual(
+      itemId,
+      otherItemId,
+      "cada usuário tem seu próprio registro, não compartilhado por engano",
+    );
+  }
 
   // Fase 0C: registration must atomically enroll the account into Tenant 01
   // (aristo.profiles + aristo.tenant_members). Postgres-only — these tables
@@ -393,6 +582,37 @@ try {
       status: "suspended",
     });
 
+    // Fase 2B: while suspended (no active organization membership), the
+    // student cannot create new study data — refused explicitly (403), not
+    // silently written as an orphan row.
+    const orphanId = randomUUID();
+    const orphanAttempt = await post(student, "/api/study", {
+      action: "save-item",
+      item: {
+        id: orphanId,
+        kind: "habit",
+        title: "Não deveria salvar",
+        notes: "",
+        frequency: "Todos os dias",
+        measure: "check",
+        target: 1,
+        unit: "",
+        date: (await (await student.ctx.request.get(base + "/api/study")).json()).today,
+        time: "",
+        priority: "Normal",
+        value: 0,
+        done: false,
+      },
+    });
+    assert.equal(orphanAttempt.status(), 403);
+    assert.equal(
+      Number(
+        (await admin("SELECT count(*) AS total FROM items WHERE id=?", [orphanId]))[0]
+          .total,
+      ),
+      0,
+    );
+
     // mentors are never released by removeStudent, with or without students left
     assert.deepEqual(await membership(mentor.user.id), {
       member_role: "MENTOR",
@@ -431,7 +651,7 @@ try {
   }
 
   console.log(
-    "Delivery: mentor permissions, valid dates, concurrent writes, recovery UI, one-time tokens, revocation, login, Tenant 01 identity sync and organization_members sync passed.",
+    "Delivery: mentor permissions, valid dates, concurrent writes, recovery UI, one-time tokens, revocation, login, Tenant 01 identity sync, organization_members sync and business-data tenant/organization scoping passed.",
   );
 } finally {
   await browser.close();

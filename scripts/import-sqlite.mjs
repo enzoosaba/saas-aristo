@@ -27,6 +27,17 @@ const tables = [
   "study_sessions",
   "demo_batches",
 ];
+// Fase 2A: these five tables now require tenant_id/organization_id in
+// Postgres, columns SQLite never had. A SQLite backup predates multi-tenant
+// entirely, so — same as every other backfill in this migration — every
+// imported row is stamped as belonging to Tenant 01 / Turma Inicial.
+const SCOPED_TABLES = new Set([
+  "items",
+  "records",
+  "plans",
+  "questions",
+  "study_sessions",
+]);
 try {
   if (sqlite.prepare("PRAGMA integrity_check").get().integrity_check !== "ok")
     throw new Error("Backup inválido.");
@@ -42,13 +53,32 @@ try {
     if (Number(rows[0].total))
       throw new Error("Destino não está vazio; importação cancelada.");
   }
+  let tenantId, organizationId;
+  if (tables.some((t) => SCOPED_TABLES.has(t))) {
+    ({
+      rows: [{ id: tenantId }],
+    } = await client.query(
+      "SELECT id FROM aristo.tenants WHERE slug='mentoria-coelho'",
+    ));
+    ({
+      rows: [{ id: organizationId }],
+    } = await client.query(
+      "SELECT id FROM aristo.organizations WHERE tenant_id=$1 AND name='Turma Inicial'",
+      [tenantId],
+    ));
+  }
   for (const table of tables) {
     const rows = sqlite.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all();
     for (const row of rows) {
       const keys = Object.keys(row);
+      const values = Object.values(row);
+      if (SCOPED_TABLES.has(table)) {
+        keys.push("tenant_id", "organization_id");
+        values.push(tenantId, organizationId);
+      }
       await client.query(
         `INSERT INTO aristo.${table} (${keys.map((k) => `"${k}"`).join(",")}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(",")})`,
-        Object.values(row),
+        values,
       );
     }
     const check = await client.query(

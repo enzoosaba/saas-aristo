@@ -124,6 +124,45 @@ export async function ensureOrganizationMembership(
     .run(tenant_id, organization_id, userId, role);
 }
 
+export type UserScope = { tenantId: string; organizationId: string };
+
+// Fase 2B: resolves the tenant/organization a user's *new* study data
+// (items/records/plans/questions/study_sessions) should be stamped with.
+// Deliberately not gated by isPostgres() internally — callers only call
+// this from inside an `if (isPostgres())` branch (see study.ts), since a
+// null return here means something different from "SQLite mode": it means
+// "this user has no valid tenant/organization context; refuse the write"
+// (see the doc comment on the call sites in study.ts).
+//
+// Reads tenant_members first (the authoritative source for which tenant a
+// user belongs to — see syncTenantMembership) and then organization_members
+// scoped to that same tenant, rather than shortcutting through
+// organization_members.tenant_id alone — this keeps the tenant/organization
+// hierarchy explicit even though, today, resolving either one alone would
+// happen to give the same answer.
+//
+// Encapsulated as a single "current scope" lookup on purpose: today it can
+// only ever resolve to one row each (one tenant, one active organization
+// per user), but Fase 4 (switching organizations, multiple memberships)
+// only has to change this one function, not every call site.
+export async function resolveUserScope(
+  userId: string,
+): Promise<UserScope | null> {
+  const tenant = (await db()
+    .prepare(
+      "SELECT tenant_id FROM tenant_members WHERE user_id=? AND status='active' ORDER BY joined_at ASC LIMIT 1",
+    )
+    .get(userId)) as { tenant_id: string } | undefined;
+  if (!tenant) return null;
+  const organization = (await db()
+    .prepare(
+      "SELECT organization_id FROM organization_members WHERE user_id=? AND tenant_id=? AND status='active' ORDER BY joined_at ASC LIMIT 1",
+    )
+    .get(userId, tenant.tenant_id)) as { organization_id: string } | undefined;
+  if (!organization) return null;
+  return { tenantId: tenant.tenant_id, organizationId: organization.organization_id };
+}
+
 // Fase 1C: called from mentor.ts (removeStudent) after a mentor_students
 // link is deleted. A student can have more than one mentor, so losing one
 // link does not necessarily mean they left the organization — only suspend

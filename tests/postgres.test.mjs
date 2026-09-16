@@ -70,12 +70,22 @@ test("all application SQL compiles against the PostgreSQL migration", async () =
     await db.exec(
       "INSERT INTO aristo.users(id,name,email,password,created_at) VALUES('a','A','a@example.test','hash',0),('b','B','b@example.test','hash',0)",
     );
+    // Fase 2A: items/records now require tenant_id/organization_id.
+    const [scopeTenant] = (
+      await db.query("SELECT id FROM aristo.tenants WHERE slug='mentoria-coelho'")
+    ).rows;
+    const [scopeOrg] = (
+      await db.query(
+        "SELECT id FROM aristo.organizations WHERE tenant_id=$1 AND name='Turma Inicial'",
+        [scopeTenant.id],
+      )
+    ).rows;
     await db.exec(
-      "INSERT INTO aristo.items(id,user_id,data) VALUES('i','a','{}')",
+      `INSERT INTO aristo.items(id,user_id,data,tenant_id,organization_id) VALUES('i','a','{}','${scopeTenant.id}','${scopeOrg.id}')`,
     );
     await assert.rejects(
       db.exec(
-        "INSERT INTO aristo.records(user_id,item_id,date,target) VALUES('b','i','2026-09-15',1)",
+        `INSERT INTO aristo.records(user_id,item_id,date,target,tenant_id,organization_id) VALUES('b','i','2026-09-15',1,'${scopeTenant.id}','${scopeOrg.id}')`,
       ),
       /foreign key/i,
     );

@@ -1,8 +1,13 @@
-import { db, transaction } from "./db";
+import { db, isPostgres, transaction } from "./db";
 
 import { HttpError } from "./http";
 
-import { updateProfileAvatar, updateProfileName } from "./identity";
+import {
+  resolveUserScope,
+  updateProfileAvatar,
+  updateProfileName,
+  type UserScope,
+} from "./identity";
 
 import { mutation } from "./validation";
 
@@ -134,6 +139,25 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
       );
     }
 
+    // Fase 2B: resolved lazily, only by the branches below that create a
+    // new row in items/records/plans/questions/study_sessions — actions
+    // that don't touch those tables (profile edits, deletions, etc.) must
+    // keep working even for a user with no active organization membership.
+    // Memoized per mutate() call since only one action runs per call today.
+    let scope: UserScope | undefined;
+    async function requireScope() {
+      if (scope === undefined) {
+        const resolved = await resolveUserScope(user.id);
+        if (!resolved)
+          throw new HttpError(
+            403,
+            "Sua conta ainda não está vinculada a uma organização. Peça para seu mentor te adicionar.",
+          );
+        scope = resolved;
+      }
+      return scope;
+    }
+
     if (data.action === "save-session" || data.action === "delete-session") {
       const id = data.action === "save-session" ? data.session.id : data.id;
       const version =
@@ -169,11 +193,26 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
             409,
             "Esse horário já tem uma sessão. Escolha outro horário.",
           );
-        await connection
-          .prepare(
-            "INSERT INTO study_sessions(id,user_id,data) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,version=study_sessions.version+1",
-          )
-          .run(id, user.id, JSON.stringify(session));
+        if (isPostgres()) {
+          const s = await requireScope();
+          await connection
+            .prepare(
+              "INSERT INTO study_sessions(id,user_id,data,tenant_id,organization_id) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,version=study_sessions.version+1",
+            )
+            .run(
+              id,
+              user.id,
+              JSON.stringify(session),
+              s.tenantId,
+              s.organizationId,
+            );
+        } else {
+          await connection
+            .prepare(
+              "INSERT INTO study_sessions(id,user_id,data) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,version=study_sessions.version+1",
+            )
+            .run(id, user.id, JSON.stringify(session));
+        }
       }
     }
     if (data.action === "save-question" || data.action === "delete-question") {
@@ -202,11 +241,26 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
         if (data.question.date > localDate())
           throw new HttpError(400, "Registre apenas questões já realizadas.");
 
-        await connection
-          .prepare(
-            "INSERT INTO questions(id,user_id,data) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,version=questions.version+1",
-          )
-          .run(id, user.id, JSON.stringify(data.question));
+        if (isPostgres()) {
+          const s = await requireScope();
+          await connection
+            .prepare(
+              "INSERT INTO questions(id,user_id,data,tenant_id,organization_id) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,version=questions.version+1",
+            )
+            .run(
+              id,
+              user.id,
+              JSON.stringify(data.question),
+              s.tenantId,
+              s.organizationId,
+            );
+        } else {
+          await connection
+            .prepare(
+              "INSERT INTO questions(id,user_id,data) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,version=questions.version+1",
+            )
+            .run(id, user.id, JSON.stringify(data.question));
+        }
       }
     }
 
@@ -250,17 +304,29 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
       } else {
         if (data.item.version) throw new HttpError(404, "Item não encontrado.");
 
-        await connection
-
-          .prepare("INSERT INTO items(id,user_id,data) VALUES(?,?,?)")
-
-          .run(
-            data.item.id,
-
-            user.id,
-
-            JSON.stringify({ ...data.item, value: 0, done: false }),
-          );
+        const itemData = JSON.stringify({
+          ...data.item,
+          value: 0,
+          done: false,
+        });
+        if (isPostgres()) {
+          const s = await requireScope();
+          await connection
+            .prepare(
+              "INSERT INTO items(id,user_id,data,tenant_id,organization_id) VALUES(?,?,?,?,?)",
+            )
+            .run(
+              data.item.id,
+              user.id,
+              itemData,
+              s.tenantId,
+              s.organizationId,
+            );
+        } else {
+          await connection
+            .prepare("INSERT INTO items(id,user_id,data) VALUES(?,?,?)")
+            .run(data.item.id, user.id, itemData);
+        }
       }
     }
 
@@ -341,27 +407,38 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
       const done =
         item.measure === "count" ? data.value >= item.target : data.done;
 
-      await connection
-
-        .prepare(
-          `INSERT INTO records(user_id,item_id,date,value,done,target,version) VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id,item_id,date) DO UPDATE SET value=excluded.value,done=excluded.done,target=excluded.target,version=records.version+1`,
-        )
-
-        .run(
-          user.id,
-
-          item.id,
-
-          recordDate,
-
-          data.value,
-
-          Number(done),
-
-          item.target,
-
-          (existing?.version || 0) + 1,
-        );
+      if (isPostgres()) {
+        const s = await requireScope();
+        await connection
+          .prepare(
+            `INSERT INTO records(user_id,item_id,date,value,done,target,version,tenant_id,organization_id) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id,item_id,date) DO UPDATE SET value=excluded.value,done=excluded.done,target=excluded.target,version=records.version+1`,
+          )
+          .run(
+            user.id,
+            item.id,
+            recordDate,
+            data.value,
+            Number(done),
+            item.target,
+            (existing?.version || 0) + 1,
+            s.tenantId,
+            s.organizationId,
+          );
+      } else {
+        await connection
+          .prepare(
+            `INSERT INTO records(user_id,item_id,date,value,done,target,version) VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id,item_id,date) DO UPDATE SET value=excluded.value,done=excluded.done,target=excluded.target,version=records.version+1`,
+          )
+          .run(
+            user.id,
+            item.id,
+            recordDate,
+            data.value,
+            Number(done),
+            item.target,
+            (existing?.version || 0) + 1,
+          );
+      }
     }
 
     if (data.action === "save-plan") {
@@ -381,13 +458,20 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
         observacoes: data.observacoes,
       });
 
-      await connection
-
-        .prepare(
-          "INSERT INTO plans(user_id,date,data) VALUES(?,?,?) ON CONFLICT(user_id,date) DO UPDATE SET data=excluded.data,version=plans.version+1",
-        )
-
-        .run(user.id, data.date, plan);
+      if (isPostgres()) {
+        const s = await requireScope();
+        await connection
+          .prepare(
+            "INSERT INTO plans(user_id,date,data,tenant_id,organization_id) VALUES(?,?,?,?,?) ON CONFLICT(user_id,date) DO UPDATE SET data=excluded.data,version=plans.version+1",
+          )
+          .run(user.id, data.date, plan, s.tenantId, s.organizationId);
+      } else {
+        await connection
+          .prepare(
+            "INSERT INTO plans(user_id,date,data) VALUES(?,?,?) ON CONFLICT(user_id,date) DO UPDATE SET data=excluded.data,version=plans.version+1",
+          )
+          .run(user.id, data.date, plan);
+      }
     }
 
     if (data.action === "profile") {
