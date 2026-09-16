@@ -1397,6 +1397,20 @@ test("Fase 3B RLS batch 4: organization_members enforces isolation, self-promoti
       "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role,status) VALUES($1,$2,'fresh-mentor','MENTOR','active') ON CONFLICT (organization_id,user_id) DO UPDATE SET status='active', updated_at=now()",
       [tenantAId, orgAId],
     );
+    // --- Explicit idempotent MENTOR→MENTOR UPDATE of the mentor's own row
+    // (the ON CONFLICT case above never actually names member_role in its
+    // SET list, so it doesn't by itself prove this — a real UPDATE that
+    // writes the same value back must pass both USING and WITH CHECK via
+    // the same self-clause used for INSERT).
+    await asActor(
+      "fresh-mentor",
+      "UPDATE aristo.organization_members SET member_role='MENTOR' WHERE user_id='fresh-mentor'",
+    );
+    assert.equal(
+      (await asOwner("SELECT member_role FROM aristo.organization_members WHERE user_id='fresh-mentor'")).rows[0].member_role,
+      "MENTOR",
+      "mentor real deve poder reafirmar a própria linha como MENTOR (upsert idempotente)",
+    );
 
     // --- A mentor inserting a STUDENT row on someone else's behalf
     // (addStudent) is the confirmed real path.
