@@ -8,7 +8,7 @@ import {
   logout,
   requireUser,
 } from "@/server/auth";
-import { db, setActor, transaction } from "@/server/db";
+import { db, isPostgres, setActor, transaction } from "@/server/db";
 import { body, failure, HttpError, json, limit } from "@/server/http";
 import {
   createProfile,
@@ -113,9 +113,23 @@ export async function POST(request: Request) {
       await createSession(id);
       return json({ ok: true }, 201);
     }
-    const user = (await connection
-      .prepare("SELECT id,password FROM users WHERE email=?")
-      .get(data.email)) as { id: string; password: string } | undefined;
+    // Fase 3B part 4: no actor exists yet at this point (finding the
+    // account by email *is* the point) — SELECT id,password FROM users
+    // WHERE email=? runs through aristo.verify_login_credential(), a
+    // narrow SECURITY DEFINER lookup, instead of a direct users read that
+    // a future self-only RLS policy would refuse. SQLite has no such
+    // function (and no RLS at all), so it keeps the original direct query.
+    const user = (
+      isPostgres()
+        ? await connection
+            .prepare(
+              "SELECT * FROM aristo.verify_login_credential(?)",
+            )
+            .get(data.email)
+        : await connection
+            .prepare("SELECT id,password FROM users WHERE email=?")
+            .get(data.email)
+    ) as { id: string; password: string } | undefined;
     const valid = await passwordMatches(
       data.password,
       user?.password || "00000000000000000000000000000000:" + "00".repeat(64),

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { db, transaction } from "@/server/db";
+import { db, isPostgres, transaction } from "@/server/db";
 import { body, failure, HttpError, json, limit } from "@/server/http";
 import { passwordHash, logout } from "@/server/auth";
 
@@ -38,9 +38,19 @@ export async function POST(request: Request) {
           503,
           "A recuperação por e-mail ainda não está disponível. Entre em contato com seu mentor.",
         );
-      const user = (await db()
-        .prepare("SELECT id FROM users WHERE email=?")
-        .get(input.email)) as { id: string } | undefined;
+      // Fase 3B part 4: this route is inherently pre-auth (recovering a
+      // password you forgot doesn't require a session) — same reasoning
+      // as the login lookup, via aristo.find_user_by_email() under
+      // Postgres, the original direct query under SQLite.
+      const user = (
+        isPostgres()
+          ? await db()
+              .prepare("SELECT id FROM aristo.find_user_by_email(?)")
+              .get(input.email)
+          : await db()
+              .prepare("SELECT id FROM users WHERE email=?")
+              .get(input.email)
+      ) as { id: string } | undefined;
       if (user) {
         const token = randomBytes(32).toString("hex");
         await db()

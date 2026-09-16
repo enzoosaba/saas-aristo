@@ -119,6 +119,51 @@ try {
     }
   }
 
+  // Fase 3B part 4: routing the login lookup through
+  // aristo.verify_login_credential() must not open (or widen) a
+  // side-channel for enumerating which emails have an account — a
+  // nonexistent email and a real email with the wrong password have to
+  // remain indistinguishable in status and response body. (Timing safety
+  // itself comes from the code always calling passwordMatches() against a
+  // fixed dummy hash when no user is found — unchanged by this refactor;
+  // this checks the observable HTTP contract, not wall-clock timing, which
+  // isn't reliable to assert on in a shared CI runner.)
+  {
+    const bogusEmail = `no-such-account-${Date.now()}@example.test`;
+    const anyPassword = "Qualquer-Senha-1234567!";
+    const [unknownEmailResponse, wrongPasswordResponse] = await Promise.all([
+      fetch(base + "/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: base },
+        body: JSON.stringify({
+          action: "login",
+          email: bogusEmail,
+          password: anyPassword,
+        }),
+      }),
+      fetch(base + "/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: base },
+        body: JSON.stringify({
+          action: "login",
+          email: student.email,
+          password: anyPassword,
+        }),
+      }),
+    ]);
+    assert.equal(unknownEmailResponse.status, 401);
+    assert.equal(wrongPasswordResponse.status, 401);
+    const [unknownEmailBody, wrongPasswordBody] = await Promise.all([
+      unknownEmailResponse.json(),
+      wrongPasswordResponse.json(),
+    ]);
+    assert.deepEqual(
+      unknownEmailBody,
+      wrongPasswordBody,
+      "e-mail inexistente e senha errada devem ser indistinguíveis na resposta",
+    );
+  }
+
   // Fase 3A: requireMentor() must work through the new SaaS model alone,
   // not only via the users.role fallback. "modeloNovo" registers as a
   // plain student (users.role stays 'student') and is never promoted the

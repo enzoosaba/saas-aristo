@@ -1,4 +1,4 @@
-import { db, transaction } from "./db";
+import { db, isPostgres, transaction } from "./db";
 import { HttpError } from "./http";
 import {
   ensureOrganizationMembership,
@@ -127,9 +127,22 @@ export async function dailySummary(
 
 export async function addStudent(mentorId: string, email: string) {
   const connection = db();
-  const student = (await connection
-    .prepare("SELECT id,role FROM users WHERE email=?")
-    .get(email)) as { id: string; role: string } | undefined;
+  // Fase 3B part 4: the mentor is already authenticated at this point, but
+  // this specific lookup is for an *arbitrary other* user by email, before
+  // any mentor_students/organization_members link exists between them — a
+  // future users RLS policy scoped to "your own row or someone you're
+  // already linked to" can't see this row yet, by construction. Routed
+  // through aristo.find_user_by_email(), the same narrow SECURITY DEFINER
+  // lookup used for login/recovery. SQLite keeps the original direct query.
+  const student = (
+    isPostgres()
+      ? await connection
+          .prepare("SELECT * FROM aristo.find_user_by_email(?)")
+          .get(email)
+      : await connection
+          .prepare("SELECT id,role FROM users WHERE email=?")
+          .get(email)
+  ) as { id: string; role: string } | undefined;
   if (!student)
     throw new HttpError(404, "Nenhuma conta encontrada com esse e-mail.");
   if (student.id === mentorId)
