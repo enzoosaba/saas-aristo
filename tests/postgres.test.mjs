@@ -1746,3 +1746,166 @@ test("Fase 3B RLS batch 5: get_mentor_ranking returns only id/name/xp for siblin
     await db.close();
   }
 });
+
+test("Fase 3B RLS batch 6: sessions and password_resets work as token-possession exceptions", async () => {
+  const db = new PGlite();
+  try {
+    const { asActor, asOwner } = await buildTwoTenantFixture(db);
+    const now = Date.now();
+
+    // --- sessions INSERT: always self, matching createSession()'s
+    // setActor(userId) right before the INSERT.
+    await asActor(
+      "student-a",
+      "INSERT INTO aristo.sessions(token,user_id,expires) VALUES('tok-student-a','student-a',$1)",
+      [now + 1_000_000],
+    );
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.sessions WHERE token='tok-student-a'")).rows.length,
+      1,
+    );
+    await assert.rejects(
+      asActor(
+        "mentor-a",
+        "INSERT INTO aristo.sessions(token,user_id,expires) VALUES('tok-forged','student-a',$1)",
+        [now + 1_000_000],
+      ),
+      /row-level security/i,
+      "mentor-a não pode criar uma sessão em nome de student-a",
+    );
+
+    // --- sessions SELECT: USING(true) — the row itself carries no secret
+    // beyond the token value, and nothing in the app does a raw SELECT
+    // against this table anymore (batch 5 routed the one that used to
+    // exist through resolve_session_user()); this just confirms the table
+    // doesn't refuse a read outright regardless of actor.
+    assert.equal(
+      (await asActor("student-b", "SELECT 1 FROM aristo.sessions WHERE token='tok-student-a'"))
+        .rows.length,
+      1,
+    );
+    assert.equal(
+      (await asActor(null, "SELECT 1 FROM aristo.sessions WHERE token='tok-student-a'")).rows
+        .length,
+      1,
+    );
+
+    // --- sessions DELETE: USING(true) covers both the app's self-scoped
+    // deletes (logout, change-password) and its no-actor sweeps (expired
+    // cleanup) uniformly. Seed an expired row and delete it with no actor
+    // at all, exactly like auth.ts's cleanup does.
+    await asOwner(
+      "INSERT INTO aristo.sessions(token,user_id,expires) VALUES('tok-expired','student-a',$1)",
+      [now - 1_000],
+    );
+    await asActor(null, "DELETE FROM aristo.sessions WHERE expires < $1", [now]);
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.sessions WHERE token='tok-expired'")).rows.length,
+      0,
+    );
+    // logout()'s own delete: no actor, exact token.
+    await asActor(null, "DELETE FROM aristo.sessions WHERE token='tok-student-a'");
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.sessions WHERE token='tok-student-a'")).rows.length,
+      0,
+    );
+
+    // --- sessions UPDATE: no confirmed path — admin-only default.
+    await asOwner(
+      "INSERT INTO aristo.sessions(token,user_id,expires) VALUES('tok-2','student-a',$1)",
+      [now + 1_000_000],
+    );
+    assert.equal(
+      (
+        await asActor("student-a", "UPDATE aristo.sessions SET expires=$1 WHERE token='tok-2'", [
+          now + 2_000_000,
+        ])
+      ).rowCount,
+      0,
+      "nenhum caminho real faz UPDATE em sessions — nem o dono da sessão",
+    );
+    await asActor("platform-admin", "UPDATE aristo.sessions SET expires=$1 WHERE token='tok-2'", [
+      now + 2_000_000,
+    ]);
+    assert.equal(
+      Number((await asOwner("SELECT expires FROM aristo.sessions WHERE token='tok-2'")).rows[0].expires),
+      now + 2_000_000,
+    );
+
+    // --- password_resets INSERT: WITH CHECK(true), not self — the app's
+    // only INSERT (recovery/route.ts's "request" branch) runs with no
+    // actor at all, since the requester was never authenticated as the
+    // account being reset.
+    await asActor(
+      null,
+      "INSERT INTO aristo.password_resets(token,user_id,expires) VALUES('reset-student-a','student-a',$1)",
+      [now + 1_000_000],
+    );
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.password_resets WHERE token='reset-student-a'")).rows
+        .length,
+      1,
+    );
+
+    // --- password_resets SELECT: USING(true) — recovery/route.ts's token
+    // verification runs before any actor exists.
+    assert.equal(
+      (
+        await asActor(null, "SELECT user_id FROM aristo.password_resets WHERE token=$1", [
+          "reset-student-a",
+        ])
+      ).rows[0].user_id,
+      "student-a",
+    );
+
+    // --- password_resets DELETE: USING(true) — both the no-actor sweep
+    // (expired rows, or the insert-then-rollback-on-email-failure path)
+    // and the reset-confirm's own actor-scoped consume need to work.
+    await asOwner(
+      "INSERT INTO aristo.password_resets(token,user_id,expires) VALUES('reset-expired','student-a',$1)",
+      [now - 1_000],
+    );
+    await asActor(null, "DELETE FROM aristo.password_resets WHERE expires < $1", [now]);
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.password_resets WHERE token='reset-expired'")).rows
+        .length,
+      0,
+    );
+    await asActor("student-a", "DELETE FROM aristo.password_resets WHERE token='reset-student-a'");
+    assert.equal(
+      (await asOwner("SELECT 1 FROM aristo.password_resets WHERE token='reset-student-a'")).rows
+        .length,
+      0,
+    );
+
+    // --- password_resets UPDATE: no confirmed path — admin-only default.
+    await asOwner(
+      "INSERT INTO aristo.password_resets(token,user_id,expires) VALUES('reset-2','student-a',$1)",
+      [now + 1_000_000],
+    );
+    assert.equal(
+      (
+        await asActor(
+          "student-a",
+          "UPDATE aristo.password_resets SET expires=$1 WHERE token='reset-2'",
+          [now + 2_000_000],
+        )
+      ).rowCount,
+      0,
+    );
+    await asActor(
+      "platform-admin",
+      "UPDATE aristo.password_resets SET expires=$1 WHERE token='reset-2'",
+      [now + 2_000_000],
+    );
+    assert.equal(
+      Number(
+        (await asOwner("SELECT expires FROM aristo.password_resets WHERE token='reset-2'")).rows[0]
+          .expires,
+      ),
+      now + 2_000_000,
+    );
+  } finally {
+    await db.close();
+  }
+});
