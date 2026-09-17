@@ -18,7 +18,7 @@ const inputSchema = z.discriminatedUnion("action", [
     .object({
       action: z.literal("reset"),
       token: z.string().regex(/^[a-f0-9]{64}$/),
-      password: z.string().min(12).max(128),
+      password: z.string().min(8).max(128),
     })
     .strict(),
 ]);

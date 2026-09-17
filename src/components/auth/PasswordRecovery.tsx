@@ -58,7 +58,7 @@ export default function PasswordRecovery({
                   name="password"
                   type="password"
                   autoComplete="new-password"
-                  minLength={12}
+                  minLength={8}
                   maxLength={128}
                   required
                 />
@@ -69,12 +69,12 @@ export default function PasswordRecovery({
                   name="confirm"
                   type="password"
                   autoComplete="new-password"
-                  minLength={12}
+                  minLength={8}
                   maxLength={128}
                   required
                 />
               </label>
-              <p className="field-hint">Use pelo menos 12 caracteres.</p>
+              <p className="field-hint">Use pelo menos 8 caracteres.</p>
             </>
           ) : (
             <label>

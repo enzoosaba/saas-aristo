@@ -100,7 +100,7 @@ export default function AuthForm({
                   name="password"
                   type={showPassword ? "text" : "password"}
                   required
-                  minLength={12}
+                  minLength={8}
                   maxLength={128}
                   autoComplete={register ? "new-password" : "current-password"}
                 />
@@ -115,7 +115,7 @@ export default function AuthForm({
                 </button>
               </div>
             </label>
-            <p className="field-hint">Use pelo menos 12 caracteres.</p>
+            <p className="field-hint">Use pelo menos 8 caracteres.</p>
             {(error || connectionError) && (
               <p role="alert">{error || connectionError}</p>
             )}

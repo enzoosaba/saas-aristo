@@ -20,7 +20,7 @@ const credentials = z
   .object({
     action: z.enum(["login", "register"]),
     email: z.string().trim().toLowerCase().email().max(254),
-    password: z.string().min(12).max(128),
+    password: z.string().min(8).max(128),
     name: z.string().trim().min(2).max(80).optional(),
   })
   .strict();
@@ -45,8 +45,8 @@ export async function POST(request: Request) {
       const change = z
         .object({
           action: z.literal("change-password"),
-          currentPassword: z.string().min(12).max(128),
-          newPassword: z.string().min(12).max(128),
+          currentPassword: z.string().min(8).max(128),
+          newPassword: z.string().min(8).max(128),
         })
         .strict()
         .parse(input);
