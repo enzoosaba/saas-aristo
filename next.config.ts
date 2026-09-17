@@ -8,7 +8,16 @@ const localAddresses = Object.values(networkInterfaces())
   .filter((i) => i && i.family === "IPv4" && !i.internal)
   .map((i) => i!.address);
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // "standalone" packages a self-contained server.js for the Docker/
+  // scripts/start.mjs deployment path (see next.js's own deploying docs:
+  // this output mode belongs to the "Docker" self-hosting path, distinct
+  // from Vercel's own build adapter). Vercel does its own file tracing and
+  // serverless packaging — combining the two makes its builder look for a
+  // .nft.json trace file that "standalone" mode never produces in the
+  // location Vercel expects, failing the build outright ("ENOENT ...
+  // next-server.js.nft.json"). Vercel sets process.env.VERCEL during its
+  // own build, so this only activates for the Docker path.
+  ...(process.env.VERCEL ? {} : { output: "standalone" as const }),
   serverExternalPackages: ["node:sqlite", "pg"],
   allowedDevOrigins: localAddresses,
   async headers() {
