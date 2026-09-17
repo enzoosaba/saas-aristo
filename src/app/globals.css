@@ -512,6 +512,15 @@ html:has(.quick-add-dialog[open]) { overflow:hidden; }
 .quick-add-form input,.quick-add-form select,.quick-add-form textarea { display:block; width:100%; min-width:0; min-height:44px; padding:12px; margin-top:8px; border:1px solid #4a4339; border-radius:8px; background:#141414; color:#f3f1ee; font:inherit; font-size:16px; }
 .quick-add-form textarea { resize:vertical; }.quick-add-form input::placeholder,.quick-add-form textarea::placeholder { color:#aaa69e; }
 .quick-add-form :is(input,select,textarea):focus-visible { outline:2px solid #ffab54; outline-offset:2px; }
+.password-field { position:relative; }
+.password-field input { padding-right:44px; }
+/* Edge/IE ship their own built-in reveal/clear icon inside password
+   fields, which would otherwise overlap the custom toggle button below. */
+.password-field input::-ms-reveal,
+.password-field input::-ms-clear { display:none; }
+.password-toggle { position:absolute; top:50%; right:6px; transform:translateY(-50%); display:flex; align-items:center; justify-content:center; width:32px; height:32px; padding:0; border:none; border-radius:6px; background:transparent; color:var(--text-muted); }
+.password-toggle:hover { color:var(--foreground); }
+.password-toggle:focus-visible { outline:2px solid #ffab54; outline-offset:2px; color:var(--foreground); }
 .quick-add-fields { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 .optional,.field-hint { color:#bcb9b2; font-weight:400; font-size:12px; line-height:1.65; }.back-choice { display:flex; align-items:center; gap:8px; align-self:flex-start; color:#ffbf7d; font-size:13px; }
 .quick-add-footer { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; padding-top:8px; }.quick-add-footer>span { font-size:12px; color:#bcb9b2; }.quick-add-footer .primary-button { margin:0; }.quick-add-error { font-size:14px; line-height:1.65; border-left:3px solid #ff8615; padding-left:12px; color:#ffd29b; }

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
+import { Eye, EyeOff } from "lucide-react";
 import ThemeToggle from "../ThemeToggle";
 import PasswordRecovery from "./PasswordRecovery";
 export default function AuthForm({
@@ -18,6 +19,7 @@ export default function AuthForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [recovering, setRecovering] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -93,14 +95,25 @@ export default function AuthForm({
             </label>
             <label>
               Senha
-              <input
-                name="password"
-                type="password"
-                required
-                minLength={12}
-                maxLength={128}
-                autoComplete={register ? "new-password" : "current-password"}
-              />
+              <div className="password-field">
+                <input
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  minLength={12}
+                  maxLength={128}
+                  autoComplete={register ? "new-password" : "current-password"}
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((value) => !value)}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </label>
             <p className="field-hint">Use pelo menos 12 caracteres.</p>
             {(error || connectionError) && (
