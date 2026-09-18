@@ -8,7 +8,7 @@ import {
   logout,
   requireUser,
 } from "@/server/auth";
-import { db, isPostgres, setActor, transaction } from "@/server/db";
+import { db, isPostgres, setActor, transaction, withActor } from "@/server/db";
 import { body, failure, HttpError, json, limit } from "@/server/http";
 import {
   createProfile,
@@ -41,35 +41,49 @@ export async function POST(request: Request) {
     }
     if (input?.action === "change-password") {
       const user = await requireUser();
-      await limit("password:" + user.id, 5, 15 * 60000);
-      const change = z
-        .object({
-          action: z.literal("change-password"),
-          currentPassword: z.string().min(8).max(128),
-          newPassword: z.string().min(8).max(128),
-        })
-        .strict()
-        .parse(input);
-      const row = (await db()
-        .prepare("SELECT password FROM users WHERE id=?")
-        .get(user.id)) as { password: string };
-      if (!(await passwordMatches(change.currentPassword, row.password)))
-        throw new HttpError(400, "A senha atual não confere.");
-      const nextHash = await passwordHash(change.newPassword);
-      await transaction(async () => {
-        const result = await db()
-          .prepare("UPDATE users SET password=? WHERE id=? AND password=?")
-          .run(nextHash, user.id, row.password);
-        if (!result.changes)
-          throw new HttpError(
-            409,
-            "A senha mudou em outra sessão. Entre novamente.",
-          );
-        await db().prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);
-        await db()
-          .prepare("DELETE FROM password_resets WHERE user_id=?")
-          .run(user.id);
-        await createSession(user.id);
+      // Fase 3B pre-cutover fix: setActor()/enterWith() sets the actor for
+      // "the rest of this synchronous execution and following async calls"
+      // per Node's own docs, but empirically does NOT reliably survive from
+      // one independently-awaited operation (here, requireUser() resolving)
+      // to a later, separately-invoked one (limit(), then this whole
+      // block) — every db() call below saw a null actor without this,
+      // silently failing every RLS-scoped query. withActor() uses
+      // AsyncLocalStorage.run() instead of enterWith(), which Node's docs
+      // call the more reliable primitive, and explicitly scopes the actor
+      // to everything nested inside this one call.
+      await withActor(user.id, async () => {
+        await limit("password:" + user.id, 5, 15 * 60000);
+        const change = z
+          .object({
+            action: z.literal("change-password"),
+            currentPassword: z.string().min(8).max(128),
+            newPassword: z.string().min(8).max(128),
+          })
+          .strict()
+          .parse(input);
+        const row = (await db()
+          .prepare("SELECT password FROM users WHERE id=?")
+          .get(user.id)) as { password: string };
+        if (!(await passwordMatches(change.currentPassword, row.password)))
+          throw new HttpError(400, "A senha atual não confere.");
+        const nextHash = await passwordHash(change.newPassword);
+        await transaction(async () => {
+          const result = await db()
+            .prepare("UPDATE users SET password=? WHERE id=? AND password=?")
+            .run(nextHash, user.id, row.password);
+          if (!result.changes)
+            throw new HttpError(
+              409,
+              "A senha mudou em outra sessão. Entre novamente.",
+            );
+          await db()
+            .prepare("DELETE FROM sessions WHERE user_id=?")
+            .run(user.id);
+          await db()
+            .prepare("DELETE FROM password_resets WHERE user_id=?")
+            .run(user.id);
+          await createSession(user.id);
+        });
       });
       return json({ ok: true });
     }

@@ -11,6 +11,7 @@ import {
 import { localDate } from "@/lib/domain";
 import type { User } from "@/lib/domain";
 import { dateSchema } from "@/server/validation";
+import { withActor } from "@/server/db";
 export const runtime = "nodejs";
 // Fase 3A: tries the SaaS model first (an active MENTOR of some
 // organization), falling back to the legacy users.role check — kept
@@ -26,15 +27,22 @@ async function requireMentor(user: User) {
 }
 export async function GET(request: Request) {
   try {
-    const user = await requireMentor(await requireUser());
-    const url = new URL(request.url);
-    const studentId = url.searchParams.get("student");
-    if (!studentId) return json({ students: await roster(user.id) });
-    const dateParam = url.searchParams.get("date");
-    const date = dateParam ? dateSchema.parse(dateParam) : localDate();
-    if (date > localDate())
-      throw new HttpError(400, "Selecione uma data até hoje.");
-    return json(await dailySummary(user.id, studentId, date));
+    const authUser = await requireUser();
+    // requireUser()'s actor (set deep inside currentUser()) does not
+    // reliably survive being awaited from here — see study/route.ts's
+    // same fix. requireMentor() itself does an RLS-scoped lookup, so it
+    // needs to run inside withActor() too, not just what follows it.
+    return await withActor(authUser.id, async () => {
+      const user = await requireMentor(authUser);
+      const url = new URL(request.url);
+      const studentId = url.searchParams.get("student");
+      if (!studentId) return json({ students: await roster(user.id) });
+      const dateParam = url.searchParams.get("date");
+      const date = dateParam ? dateSchema.parse(dateParam) : localDate();
+      if (date > localDate())
+        throw new HttpError(400, "Selecione uma data até hoje.");
+      return json(await dailySummary(user.id, studentId, date));
+    });
   } catch (e) {
     return failure(e);
   }
@@ -55,12 +63,15 @@ const mentorMutation = z.discriminatedUnion("action", [
 ]);
 export async function POST(request: Request) {
   try {
-    const user = await requireMentor(await requireUser());
-    await limit("mentor:" + user.id, 60);
-    const data = mentorMutation.parse(await body(request));
-    if (data.action === "add-student") await addStudent(user.id, data.email);
-    else await removeStudent(user.id, data.studentId);
-    return json({ students: await roster(user.id) });
+    const authUser = await requireUser();
+    return await withActor(authUser.id, async () => {
+      const user = await requireMentor(authUser);
+      await limit("mentor:" + user.id, 60);
+      const data = mentorMutation.parse(await body(request));
+      if (data.action === "add-student") await addStudent(user.id, data.email);
+      else await removeStudent(user.id, data.studentId);
+      return json({ students: await roster(user.id) });
+    });
   } catch (e) {
     return failure(e);
   }

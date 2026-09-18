@@ -44,6 +44,17 @@ export async function currentUser(): Promise<User | null> {
   if (user) setActor(user.id);
   return user;
 }
+// Fase 3B pre-cutover fix: setActor()/enterWith() (called inside
+// currentUser() above) does not reliably survive being awaited from a
+// different function's continuation — verified empirically: every db()
+// call made by a caller of requireUser() after this returns saw a null
+// actor, silently emptying every RLS-scoped query (or, worse, an
+// RLS-scoped write) without an error. Calling setActor() again here does
+// NOT fix it either (same nested-return problem) — every caller of
+// requireUser()/requireMentor() MUST wrap its own subsequent logic in
+// withActor(user.id, ...) (from ./db, uses AsyncLocalStorage.run()
+// instead of enterWith()) rather than assuming the actor is still set.
+// See src/app/api/study/route.ts and src/app/api/mentor/route.ts.
 export async function requireUser() {
   const user = await currentUser();
   if (!user) throw new HttpError(401, "Entre na sua conta para continuar.");
