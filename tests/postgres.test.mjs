@@ -33,6 +33,7 @@ test("all application SQL compiles against the PostgreSQL migration", async () =
       "src/app/api/mentor/route.ts",
       "src/app/api/health/route.ts",
       "src/app/api/auth/recovery/route.ts",
+      "src/app/api/admin/route.ts",
     ];
     let queries = 0;
     for (const file of files) {
@@ -2313,6 +2314,67 @@ test("Fase 3B pre-cutover: the real registration sequence completes end-to-end a
         )
       ).rows[0].status,
       "active",
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("Fase 4A: aristo.set_member_role() only works for platform_admin, keeps organization_members in sync", async () => {
+  const db = new PGlite();
+  try {
+    const { asActor, asOwner } = await buildTwoTenantFixture(db);
+
+    // A plain mentor (not platform_admin) cannot call this directly —
+    // the gate is inside the function itself, not just hidden behind a
+    // UI button. Postgres wraps the RAISE EXCEPTION as a generic server
+    // error; the important thing is that it's rejected, not what shape.
+    await assert.rejects(
+      asActor("mentor-a", "SELECT aristo.set_member_role('student-b','mentor')"),
+      /permission denied/i,
+      "mentor-a não é platform_admin e não deve conseguir promover ninguém",
+    );
+    assert.equal(
+      (await asOwner("SELECT role FROM aristo.users WHERE id='student-b'")).rows[0].role,
+      "student",
+      "student-b não deve ter sido promovido pela tentativa negada",
+    );
+
+    // platform-admin promotes student-a to mentor — both users.role and
+    // organization_members.member_role must end up in sync.
+    await asActor("platform-admin", "SELECT aristo.set_member_role('student-a','mentor')");
+    assert.equal(
+      (await asOwner("SELECT role FROM aristo.users WHERE id='student-a'")).rows[0].role,
+      "mentor",
+    );
+    assert.equal(
+      (
+        await asOwner(
+          "SELECT member_role FROM aristo.organization_members WHERE user_id='student-a'",
+        )
+      ).rows[0].member_role,
+      "MENTOR",
+    );
+
+    // And back down again — demotion keeps both tables in sync too.
+    await asActor("platform-admin", "SELECT aristo.set_member_role('student-a','student')");
+    assert.equal(
+      (await asOwner("SELECT role FROM aristo.users WHERE id='student-a'")).rows[0].role,
+      "student",
+    );
+    assert.equal(
+      (
+        await asOwner(
+          "SELECT member_role FROM aristo.organization_members WHERE user_id='student-a'",
+        )
+      ).rows[0].member_role,
+      "STUDENT",
+    );
+
+    // Invalid role value is rejected outright, not silently ignored.
+    await assert.rejects(
+      asActor("platform-admin", "SELECT aristo.set_member_role('student-a','super_admin')"),
+      /invalid role/i,
     );
   } finally {
     await db.close();

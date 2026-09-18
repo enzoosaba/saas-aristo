@@ -11,6 +11,7 @@ import {
   CalendarDays,
   User,
   Users,
+  ShieldCheck,
 } from "lucide-react";
 import { useStudy } from "./StudyProvider";
 
@@ -27,12 +28,16 @@ const items = [
 ];
 
 const mentorItem = { href: "/mentoria", label: "Mentoria", icon: Users };
+const adminItem = { href: "/admin", label: "Torre de controle", icon: ShieldCheck };
 
 export default function MainNav() {
   const pathname = usePathname();
   const { data } = useStudy();
-  const links =
-    data.user.role === "mentor" ? [...items, mentorItem] : items;
+  const links = [
+    ...items,
+    ...(data.user.role === "mentor" ? [mentorItem] : []),
+    ...(data.platformAdmin ? [adminItem] : []),
+  ];
 
   return (
     <nav className="header-navigation" aria-label="Navegação principal">

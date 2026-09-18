@@ -94,6 +94,8 @@ export type StudyState = {
 
   user: User;
 
+  platformAdmin: boolean;
+
   items: StudyItem[];
 
   records: StudyRecord[];

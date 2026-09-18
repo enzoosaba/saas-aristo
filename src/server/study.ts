@@ -9,6 +9,8 @@ import {
   type UserScope,
 } from "./identity";
 
+import { isPlatformAdmin } from "./authorization";
+
 import { mutation } from "./validation";
 
 import {
@@ -65,6 +67,9 @@ export async function state(user: User): Promise<StudyState> {
 
   return {
     user,
+    // Fase 4A: surfaces admin-panel access to the nav — reuses
+    // authorization.ts's isPlatformAdmin() (Fase 3A), not a new check.
+    platformAdmin: await isPlatformAdmin(user.id),
     sessions: (
       (await connection
         .prepare(

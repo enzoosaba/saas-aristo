@@ -20,6 +20,7 @@ import {
   X,
   ArrowUpRight,
   GraduationCap,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -76,6 +77,13 @@ const mentorDestination: Destination = {
   description: "Alunos e desempenho diário",
 };
 
+const adminDestination: Destination = {
+  href: "/admin",
+  title: "Torre de controle",
+  icon: ShieldCheck,
+  description: "Contas e papéis da mentoria",
+};
+
 import { useStudy } from "../StudyProvider";
 import Avatar from "./Avatar";
 
@@ -87,8 +95,11 @@ export default function DashboardSidebar() {
   const dialog = useRef<HTMLDialogElement>(null);
   const searchButton = useRef<HTMLButtonElement>(null);
   const workspace = useRef<HTMLDetailsElement>(null);
-  const searchable =
-    data.user.role === "mentor" ? [...destinations, mentorDestination] : destinations;
+  const searchable = [
+    ...destinations,
+    ...(data.user.role === "mentor" ? [mentorDestination] : []),
+    ...(data.platformAdmin ? [adminDestination] : []),
+  ];
   const current = searchable.find((item) => item.href === pathname);
   const normalize = (value: string) =>
     value
@@ -204,6 +215,12 @@ export default function DashboardSidebar() {
             <div className="desktop-nav-group">
               <p>MENTORIA</p>
               {navLink(mentorDestination)}
+            </div>
+          )}
+          {data.platformAdmin && (
+            <div className="desktop-nav-group">
+              <p>ADMINISTRAÇÃO</p>
+              {navLink(adminDestination)}
             </div>
           )}
         </nav>
