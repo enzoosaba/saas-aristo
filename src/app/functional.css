@@ -218,6 +218,30 @@ button:disabled {
 .mentor-roster li:last-child {
   border-bottom: none;
 }
+/* Torre de controle member list: name/e-mail on the left, actions on the
+   right, and the inline reset-password form on its own full-width line. */
+.member-roster li {
+  flex-wrap: wrap;
+}
+.member-roster li > span:first-child {
+  display: flex;
+  flex: 1 1 180px;
+  flex-direction: column;
+  min-width: 0;
+}
+.member-roster small {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.member-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.member-roster .reset-password-form {
+  flex-basis: 100%;
+}
 .mentor-roster-item {
   display: flex;
   align-items: center;

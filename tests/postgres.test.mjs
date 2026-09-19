@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
+import { randomBytes, scryptSync } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import ts from "typescript";
 import { postgresSql, postgresConfig } from "../src/server/postgres-config.mjs";
@@ -2375,6 +2376,153 @@ test("Fase 4A: aristo.set_member_role() only works for platform_admin, keeps org
     await assert.rejects(
       asActor("platform-admin", "SELECT aristo.set_member_role('student-a','super_admin')"),
       /invalid role/i,
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("Fase 4A: aristo.admin_reset_password() — platform_admin only, hash only, revokes sessions and recovery links, ACL closed to PUBLIC", async () => {
+  const db = new PGlite();
+  try {
+    const { asActor, asOwner } = await buildTwoTenantFixture(db);
+    const hashOf = (password) => {
+      const salt = randomBytes(16).toString("hex");
+      return `${salt}:${scryptSync(password, salt, 64).toString("hex")}`;
+    };
+    const matches = (password, stored) => {
+      const [salt, value] = stored.split(":");
+      return scryptSync(password, salt, 64).toString("hex") === value;
+    };
+    const next = hashOf("Senha-Temporaria-2026");
+
+    for (const [token, user] of [
+      ["tok-sa-1", "student-a"],
+      ["tok-sa-2", "student-a"],
+      ["tok-sb-1", "student-b"],
+      ["tok-ma-1", "mentor-a"],
+    ])
+      await asOwner(
+        "INSERT INTO aristo.sessions(token,user_id,expires) VALUES ($1,$2,9999999999999)",
+        [token, user],
+      );
+    for (const [token, user] of [
+      ["reset-sa", "student-a"],
+      ["reset-sb", "student-b"],
+    ])
+      await asOwner(
+        "INSERT INTO aristo.password_resets(token,user_id,expires) VALUES ($1,$2,9999999999999)",
+        [token, user],
+      );
+    const count = async (table, user) =>
+      Number(
+        (
+          await asOwner(
+            `SELECT count(*) AS n FROM aristo.${table} WHERE user_id=$1`,
+            [user],
+          )
+        ).rows[0].n,
+      );
+    const passwordOf = async (user) =>
+      (await asOwner("SELECT password FROM aristo.users WHERE id=$1", [user]))
+        .rows[0].password;
+    const reset = (actor, target, hash) =>
+      asActor(actor, "SELECT aristo.admin_reset_password($1,$2) AS changed", [
+        target,
+        hash,
+      ]);
+
+    // Nobody but a platform_admin: not the account itself, another student,
+    // a mentor, a tenant admin, nor a request with no actor at all. The gate
+    // is in the function, not just behind the button.
+    for (const actor of [
+      "student-a",
+      "student-b",
+      "mentor-a",
+      "tenant-admin-a",
+      "tenant-admin-b",
+      null,
+    ])
+      await assert.rejects(
+        reset(actor, "student-a", next),
+        /permission denied/i,
+        `${actor ?? "sem ator"} não pode redefinir senhas`,
+      );
+    assert.equal(await passwordOf("student-a"), "x", "senha intacta após tentativas negadas");
+    assert.equal(await count("sessions", "student-a"), 2);
+    assert.equal(await count("password_resets", "student-a"), 1);
+
+    // A clear-text password (or anything that is not the app's scrypt
+    // salt:key format) never gets stored, even from an admin.
+    for (const bad of ["Senha-Temporaria-2026", "", "abc:def", next.toUpperCase()])
+      await assert.rejects(
+        reset("platform-admin", "student-a", bad),
+        /invalid password hash/i,
+        `hash inválido rejeitado: ${bad.slice(0, 12)}`,
+      );
+    await assert.rejects(
+      asActor(
+        "platform-admin",
+        "SELECT aristo.admin_reset_password('student-a', NULL)",
+      ),
+      /invalid password hash/i,
+    );
+    assert.equal(await passwordOf("student-a"), "x");
+
+    // The real thing: platform_admin resets student-a.
+    assert.equal(
+      (await reset("platform-admin", "student-a", next)).rows[0].changed,
+      true,
+    );
+    assert.equal(await passwordOf("student-a"), next);
+    // The login lookup (same function the app uses) now returns the new hash,
+    // which verifies against the new password and no longer against the old.
+    const login = (
+      await asActor(null, "SELECT * FROM aristo.verify_login_credential($1)", [
+        "sa@example.test",
+      ])
+    ).rows[0];
+    assert.equal(login.id, "student-a");
+    assert.equal(matches("Senha-Temporaria-2026", login.password), true);
+    assert.equal(matches("x", login.password), false);
+    // Live sessions and pending recovery links of that account are gone...
+    assert.equal(await count("sessions", "student-a"), 0);
+    assert.equal(await count("password_resets", "student-a"), 0);
+    // ...and nobody else's are touched.
+    assert.equal(await count("sessions", "student-b"), 1);
+    assert.equal(await count("sessions", "mentor-a"), 1);
+    assert.equal(await count("password_resets", "student-b"), 1);
+    assert.equal(await passwordOf("student-b"), "x");
+    assert.equal(await passwordOf("mentor-a"), "x");
+
+    // An id that matches nobody is reported, not silently "successful", and
+    // does not disturb anything.
+    assert.equal(
+      (await reset("platform-admin", "no-such-user", hashOf("Outra-Senha-2026"))).rows[0]
+        .changed,
+      false,
+    );
+    assert.equal(await count("sessions", "student-b"), 1);
+
+    // ACL on the live catalog: SECURITY DEFINER with a pinned search_path,
+    // executable by aristo_app, and not by PUBLIC.
+    const fn = (
+      await asOwner(
+        `SELECT p.prosecdef, p.proconfig::text AS config, p.proacl::text AS acl,
+                has_function_privilege('aristo_app', p.oid, 'EXECUTE') AS app_can
+           FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname='aristo' AND p.proname='admin_reset_password'`,
+      )
+    ).rows;
+    assert.equal(fn.length, 1);
+    assert.equal(fn[0].prosecdef, true);
+    assert.match(fn[0].config, /search_path=aristo, pg_catalog/);
+    assert.equal(fn[0].app_can, true);
+    assert.match(fn[0].acl, /aristo_app=X\//);
+    assert.doesNotMatch(
+      fn[0].acl,
+      /(^\{|,)"?=X\//,
+      "PUBLIC não pode executar admin_reset_password",
     );
   } finally {
     await db.close();

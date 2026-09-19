@@ -152,6 +152,7 @@ function MembersCard() {
   const [busyId, setBusyId] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState(false);
+  const [resetting, setResetting] = useState<Member | null>(null);
 
   function load() {
     fetch("/api/admin", { cache: "no-store" })
@@ -203,26 +204,143 @@ function MembersCard() {
       {members === null ? (
         <p className="panel-description">Carregando…</p>
       ) : (
-        <ul className="mentor-roster">
+        <ul className="mentor-roster member-roster">
           {members.map((member) => (
             <li key={member.id}>
               <span>
                 <strong>{member.name}</strong>
                 <small>{member.email}</small>
               </span>
-              <button
-                type="button"
-                disabled={busyId === member.id}
-                onClick={() =>
-                  void setRole(member.id, member.role === "mentor" ? "student" : "mentor")
-                }
-              >
-                {member.role === "mentor" ? "Rebaixar a aluno" : "Promover a mentor"}
-              </button>
+              <span className="member-actions">
+                <button
+                  type="button"
+                  disabled={busyId === member.id}
+                  onClick={() =>
+                    void setRole(member.id, member.role === "mentor" ? "student" : "mentor")
+                  }
+                >
+                  {member.role === "mentor" ? "Rebaixar a aluno" : "Promover a mentor"}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Redefinir senha de ${member.name}`}
+                  aria-expanded={resetting?.id === member.id}
+                  onClick={() => {
+                    setStatus("");
+                    setResetting(resetting?.id === member.id ? null : member);
+                  }}
+                >
+                  Redefinir senha
+                </button>
+              </span>
+              {resetting?.id === member.id && (
+                <ResetPasswordForm
+                  member={member}
+                  onClose={() => setResetting(null)}
+                  onDone={(message) => {
+                    setResetting(null);
+                    setError(false);
+                    setStatus(message);
+                  }}
+                />
+              )}
             </li>
           ))}
         </ul>
       )}
     </Card>
+  );
+}
+
+// Inline form under the member's row: the admin types a temporary password,
+// which the person changes afterwards in Perfil → Alterar senha. Every session
+// of that account is signed out by the server.
+function ResetPasswordForm({
+  member,
+  onClose,
+  onDone,
+}: {
+  member: Member;
+  onClose: () => void;
+  onDone: (message: string) => void;
+}) {
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reset-password",
+          userId: member.id,
+          password,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok)
+        throw Error(result.error || "Não foi possível redefinir a senha.");
+      onDone(
+        `Senha de ${member.name} redefinida. Repasse a senha temporária por um canal seguro; a pessoa foi desconectada de todos os dispositivos.`,
+      );
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Não foi possível redefinir a senha.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      className="account-form reset-password-form"
+      onSubmit={(e) => void submit(e)}
+      aria-label={`Redefinir senha de ${member.name}`}
+    >
+      <label>
+        Nova senha temporária
+        <div className="password-field">
+          <input
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            maxLength={128}
+            autoComplete="off"
+            autoFocus
+          />
+          <button
+            type="button"
+            className="password-toggle"
+            aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+            aria-pressed={showPassword}
+            onClick={() => setShowPassword((v) => !v)}
+          >
+            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        </div>
+      </label>
+      <p className="field-hint">
+        Mínimo de 8 caracteres. {member.name} será desconectado(a) de todos os
+        dispositivos e poderá trocar essa senha em Perfil → Alterar senha.
+      </p>
+      {error && <p role="alert">{error}</p>}
+      <div className="member-actions">
+        <button type="submit" className="primary-button" disabled={busy}>
+          {busy ? "Redefinindo…" : "Redefinir senha"}
+        </button>
+        <button type="button" onClick={onClose} disabled={busy}>
+          Cancelar
+        </button>
+      </div>
+    </form>
   );
 }

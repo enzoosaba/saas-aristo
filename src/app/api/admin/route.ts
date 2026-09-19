@@ -67,6 +67,13 @@ const adminMutation = z.discriminatedUnion("action", [
       role: z.enum(["student", "mentor"]),
     })
     .strict(),
+  z
+    .object({
+      action: z.literal("reset-password"),
+      userId: z.string().min(1).max(100),
+      password: z.string().min(8).max(128),
+    })
+    .strict(),
 ]);
 
 export async function POST(request: Request) {
@@ -104,6 +111,27 @@ export async function POST(request: Request) {
           );
         });
         return json({ ok: true }, 201);
+      }
+      if (data.action === "reset-password") {
+        // Resetting your own password here would sign you out (every session
+        // of the target is revoked) — the normal flow, which keeps you signed
+        // in, is Perfil → Alterar senha.
+        if (data.userId === authUser.id)
+          throw new HttpError(
+            400,
+            "Para trocar a sua própria senha, use Perfil → Alterar senha.",
+          );
+        // Only the scrypt hash goes to SQL (same passwordHash() as register
+        // and change-password). aristo.admin_reset_password() re-checks
+        // is_platform_admin() itself, writes the hash, and revokes the
+        // account's sessions and pending recovery links.
+        const row = (await db()
+          .prepare("SELECT aristo.admin_reset_password(?,?) AS changed")
+          .get(data.userId, await passwordHash(data.password))) as {
+          changed: boolean;
+        };
+        if (!row?.changed) throw new HttpError(404, "Conta não encontrada.");
+        return json({ ok: true });
       }
       // set-role: users.role has no UPDATE column privilege for aristo_app
       // at all (batch 5) — aristo.set_member_role() is the one narrow,

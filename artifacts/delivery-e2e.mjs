@@ -801,9 +801,107 @@ try {
     );
   }
 
+  // Fase 4A: the Torre de Controle's "Redefinir senha", end to end through the
+  // real route and page (Postgres only: platform_admins and
+  // aristo.admin_reset_password() do not exist in SQLite).
+  if (pg) {
+    const mk = async (name) => {
+      const ctx = await browser.newContext();
+      const email = `${name.toLowerCase()}-${Date.now()}@example.test`;
+      assert.equal(
+        (
+          await ctx.request.post(base + "/api/auth", {
+            headers: { Origin: base },
+            data: { action: "register", name, email, password },
+          })
+        ).status(),
+        201,
+      );
+      const { user } = await (await ctx.request.get(base + "/api/auth")).json();
+      return { ctx, user, email };
+    };
+    const boss = await mk("BossReset");
+    const victim = await mk("VictimReset");
+    const bystander = await mk("BystanderReset");
+    await admin("INSERT INTO platform_admins(user_id) VALUES (?)", [
+      boss.user.id,
+    ]);
+    const resetCall = (who, userId, newPassword) =>
+      post(who, "/api/admin", {
+        action: "reset-password",
+        userId,
+        password: newPassword,
+      });
+    const loginStatus = async (email, pass) => {
+      const fresh = await browser.newContext();
+      const status = (
+        await fresh.request.post(base + "/api/auth", {
+          headers: { Origin: base },
+          data: { action: "login", email, password: pass },
+        })
+      ).status();
+      await fresh.close();
+      return status;
+    };
+    const sessionStatus = async (who) =>
+      (await who.ctx.request.get(base + "/api/study")).status();
+
+    // Not an admin: refused, and the target's password is untouched.
+    assert.equal(
+      (await resetCall(victim, bystander.user.id, "Invasor-Senha-2026")).status(),
+      403,
+    );
+    assert.equal(await loginStatus(bystander.email, password), 200);
+    assert.equal(await loginStatus(bystander.email, "Invasor-Senha-2026"), 401);
+
+    // Admin, invalid requests: short password, own account, unknown id.
+    assert.equal(
+      (await resetCall(boss, victim.user.id, "curta12")).status(),
+      400,
+    );
+    assert.equal(
+      (await resetCall(boss, boss.user.id, "Outra-Senha-2026")).status(),
+      400,
+    );
+    assert.equal(
+      (await resetCall(boss, randomUUID(), "Outra-Senha-2026")).status(),
+      404,
+    );
+    assert.equal(await sessionStatus(victim), 200);
+    assert.equal(await sessionStatus(boss), 200);
+
+    // Admin, through the page: the same flow the person will use.
+    const adminPage = await boss.ctx.newPage();
+    await adminPage.goto(base + "/admin");
+    await adminPage
+      .getByRole("button", { name: "Redefinir senha de VictimReset" })
+      .click();
+    const form = adminPage.getByRole("form", {
+      name: "Redefinir senha de VictimReset",
+    });
+    await form.getByLabel("Nova senha temporária").fill("Temporaria-2026!");
+    await form.getByRole("button", { name: "Redefinir senha", exact: true }).click();
+    await adminPage.getByText("Senha de VictimReset redefinida.").waitFor();
+
+    // The account was signed out everywhere, the old password is dead, the new
+    // one works — and nobody else is affected, including the admin.
+    assert.equal(await sessionStatus(victim), 401);
+    assert.equal(await loginStatus(victim.email, password), 401);
+    assert.equal(await loginStatus(victim.email, "Temporaria-2026!"), 200);
+    assert.equal(await sessionStatus(bystander), 200);
+    assert.equal(await sessionStatus(boss), 200);
+    assert.equal(await loginStatus(bystander.email, password), 200);
+    await adminPage.close();
+    for (const who of [boss, victim, bystander]) await who.ctx.close();
+  }
+
   console.log(
     "Delivery: mentor permissions, valid dates, concurrent writes, recovery UI, one-time tokens, revocation, login, Tenant 01 identity sync, organization_members sync and business-data tenant/organization scoping passed.",
   );
+  if (pg)
+    console.log(
+      "Delivery (Postgres only): admin password reset — non-admin refused, invalid requests, page flow, target signed out everywhere, old password dead, new one works, others unaffected — passed.",
+    );
 } finally {
   await browser.close();
   sqlite?.close();
