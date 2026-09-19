@@ -160,7 +160,7 @@ export default function DashboardSidebar() {
       <aside className="desktop-sidebar" aria-label="Espaço da mentoria">
         <details className="desktop-workspace" ref={workspace}>
           <summary aria-label="Opções da Plataforma Coelho">
-            <Image src="/brand/coelho.png" alt="" width={36} height={36} />
+            <Image src="/brand/coelho-mark.png" alt="" width={36} height={36} />
             <span>
               <strong>Plataforma Coelho</strong>
               <small>Seu espaço de estudos</small>

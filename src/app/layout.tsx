@@ -56,10 +56,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           className="brand-gradient-defs"
         >
           <defs>
-            <filter id="coelho-logo-orange" colorInterpolationFilters="sRGB">
-              <feFlood className="brand-logo-color" />
-              <feComposite in2="SourceAlpha" operator="in" />
-            </filter>
             <linearGradient
               id="coelho-accent"
               gradientUnits="userSpaceOnUse"

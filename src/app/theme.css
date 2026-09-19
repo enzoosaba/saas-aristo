@@ -1,7 +1,5 @@
 /* Coelho themes: Onest, vivid orange and neutral surfaces from the references. */
-/* Recolor the supplied logo without changing its shape or alpha channel. */
-.brand-logo-color { flood-color:var(--brand-orange); }
-img[src*="coelho.png"] { filter:url(#coelho-logo-orange); }
+/* public/brand/coelho-mark.png is already solid brand orange (#ff5d00, see --brand-orange below); no filter is applied to it. (Renamed from coelho.png so no cached copy of the old two-tone file — by the Next image optimizer or a browser — can be served.) */
 :root,
 html[data-theme="dark"] {
   color-scheme:dark;

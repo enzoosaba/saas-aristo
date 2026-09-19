@@ -2556,12 +2556,29 @@ test("branding: the first tenant is renamed to Plataforma Coelho, slug untouched
         name: "Plataforma Coelho",
         slug: "mentoria-coelho",
         platform_name: "Plataforma Coelho",
-        logo_url: "/brand/coelho.png",
+        logo_url: "/brand/coelho-mark.png",
       },
     ]);
     // Running it again changes nothing.
     await db.exec(rename);
     assert.equal((await read())[0].name, "Plataforma Coelho");
+    // The logo path follows the renamed file (0023) and is not overwritten
+    // when it was set by hand.
+    const logoMigration = readFileSync(
+      "supabase/migrations/202609190023_tenant_logo_coelho_mark.sql",
+      "utf8",
+    );
+    assert.ok(files.includes("202609190023_tenant_logo_coelho_mark.sql"));
+    await db.exec(logoMigration);
+    assert.equal((await read())[0].logo_url, "/brand/coelho-mark.png");
+    await db.exec(
+      "UPDATE aristo.tenant_settings SET logo_url='/brand/personalizada.png'",
+    );
+    await db.exec(logoMigration);
+    assert.equal((await read())[0].logo_url, "/brand/personalizada.png");
+    await db.exec(
+      "UPDATE aristo.tenant_settings SET logo_url='/brand/coelho-mark.png'",
+    );
     // A name customised by hand is not overwritten.
     await db.exec(
       "UPDATE aristo.tenants SET name='Nome Personalizado' WHERE slug='mentoria-coelho'; UPDATE aristo.tenant_settings SET platform_name='Nome Personalizado'",

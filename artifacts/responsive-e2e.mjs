@@ -849,6 +849,88 @@ try {
       "brand name: Plataforma Coelho in title, login, sidebar, breadcrumb and top-bar wordmark markup (PLATAFORMA; its text is hidden at every width today); old name absent from six routes at 390/1023/1440px",
     );
   }
+  // Logo: the file is solid brand orange (#ff5d00) with a transparent
+  // background, no CSS filter is stacked on it, it actually loads in the top
+  // bar / login / sidebar, and the old two-tone file is gone.
+  {
+    assert.equal(
+      (await page.request.get(base + "/brand/coelho.png")).status(),
+      404,
+      "the old two-tone logo file must be gone",
+    );
+    const mark = await page.request.get(base + "/brand/coelho-mark.png");
+    assert.equal(mark.status(), 200);
+    assert.match(mark.headers()["content-type"], /image\/png/);
+    await page.goto(base + "/");
+    const pixels = await page.evaluate(async () => {
+      const image = new Image();
+      image.src = "/brand/coelho-mark.png";
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(image, 0, 0);
+      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let opaque = 0, notBrand = 0, transparent = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] === 255) {
+          opaque++;
+          if (data[i] !== 255 || data[i + 1] !== 93 || data[i + 2] !== 0) notBrand++;
+        } else if (data[i + 3] === 0) transparent++;
+      }
+      return {
+        w: canvas.width,
+        h: canvas.height,
+        opaque,
+        notBrand,
+        transparentShare: transparent / (data.length / 4),
+        corner: [...data.slice(0, 4)],
+      };
+    });
+    assert.deepEqual([pixels.w, pixels.h], [1254, 1254]);
+    assert.ok(pixels.opaque > 100000, "the logo body must be opaque");
+    assert.equal(pixels.notBrand, 0, "every opaque pixel must be exactly #ff5d00");
+    assert.equal(pixels.corner[3], 0, "the background must be transparent");
+    assert.ok(pixels.transparentShare > 0.6);
+
+    const logoState = async (p, selector) =>
+      p.locator(selector).first().evaluate((img) => ({
+        loaded: img.complete && img.naturalWidth > 0,
+        filter: getComputedStyle(img).filter,
+      }));
+    for (const theme of ["dark", "light"]) {
+      await page.evaluate((t) => {
+        localStorage.setItem("aristo-theme", t);
+        document.documentElement.dataset.theme = t;
+      }, theme);
+      await page.setViewportSize({ width: 390, height: 900 });
+      await page.goto(base + "/");
+      await page.locator(".brand-rabbit").waitFor();
+      const top = await logoState(page, ".brand-rabbit");
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto(base + "/");
+      await page.locator(".desktop-workspace summary img").waitFor();
+      const side = await logoState(page, ".desktop-workspace summary img");
+      for (const [where, state] of [["top bar", top], ["sidebar", side]]) {
+        assert.ok(state.loaded, `${where} logo did not load (${theme})`);
+        assert.equal(state.filter, "none", `${where} logo has a CSS filter (${theme})`);
+      }
+    }
+    const anonCtx = await browser.newContext({ reducedMotion: "reduce" });
+    const anonPage = await anonCtx.newPage();
+    await anonPage.goto(base + "/");
+    await anonPage.locator(".auth-card img").waitFor();
+    await anonPage.waitForFunction(() => {
+      const img = document.querySelector(".auth-card img");
+      return img.complete && img.naturalWidth > 0;
+    });
+    assert.equal((await logoState(anonPage, ".auth-card img")).filter, "none");
+    await anonCtx.close();
+    results.push(
+      "logo: /brand/coelho-mark.png is 1254x1254, transparent background, every opaque pixel exactly #ff5d00; loads in top bar, sidebar and login with no CSS filter in both themes; the old coelho.png is gone",
+    );
+  }
   assert.ok(
     results.every((r) => typeof r === "string"),
     "Acessibilidade: consultar violações no relatório",

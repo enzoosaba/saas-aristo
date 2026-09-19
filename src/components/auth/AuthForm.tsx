@@ -53,7 +53,7 @@ export default function AuthForm({
       </div>
       <section className="auth-card">
         <Image
-          src="/brand/coelho.png"
+          src="/brand/coelho-mark.png"
           width={68}
           height={80}
           alt="Plataforma Coelho"

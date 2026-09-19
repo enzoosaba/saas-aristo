@@ -21,7 +21,7 @@ export default function TopBar() {
           aria-label="Plataforma Coelho, início"
         >
           <Image
-            src="/brand/coelho.png"
+            src="/brand/coelho-mark.png"
             alt=""
             width={43}
             height={48}
