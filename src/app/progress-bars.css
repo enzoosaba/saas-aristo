@@ -1,0 +1,53 @@
+/*
+ * Native <progress> bars, drawn explicitly so a phone and a desktop render the
+ * same bar. Left to the browser, the look depends on the OS/engine (flat and
+ * square on some, accent-coloured on others), which is how the home streak bar
+ * ended up a plain grey strip on phones while desktop (>=1024px) had a styled
+ * pill. Same pill as the div-based ProgressBar used on Perfil and Rotina.
+ */
+
+/* Home: streak card ("N de M atividades de hoje"), dark pill on the orange card. */
+.streak-highlight progress {
+  appearance: none;
+  border: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0d010130;
+}
+.streak-highlight progress::-webkit-progress-bar {
+  background: #0d010130;
+  border-radius: 8px;
+}
+.streak-highlight progress::-webkit-progress-value {
+  background: #0d0101;
+  border-radius: 8px;
+}
+.streak-highlight progress::-moz-progress-bar {
+  background: #0d0101;
+  border-radius: 8px;
+}
+
+/* Rotina > Controle ("Metas da semana") and Questões > barras por área. */
+.weekly-progress,
+.area-bar-list progress {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-raised);
+}
+.weekly-progress::-webkit-progress-bar,
+.area-bar-list progress::-webkit-progress-bar {
+  background: var(--surface-raised);
+  border-radius: 999px;
+}
+.weekly-progress::-webkit-progress-value,
+.area-bar-list progress::-webkit-progress-value {
+  background: var(--brand-gradient);
+  border-radius: 999px;
+}
+.weekly-progress::-moz-progress-bar,
+.area-bar-list progress::-moz-progress-bar {
+  background: var(--brand-gradient);
+  border-radius: 999px;
+}

@@ -295,9 +295,6 @@
     font-size: 14px;
     margin-top: 24px;
   }
-  .highlight-progress progress {
-    height: 10px;
-  }
   .mobile-study-cards {
     display: grid;
     grid-template-columns: minmax(0, 1fr);

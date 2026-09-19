@@ -672,23 +672,6 @@
   .desktop-today-grid .mission-quick-links {
     align-self: end;
   }
-  .desktop-today-grid .streak-highlight progress {
-    appearance: none;
-    border: 0;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #0d010130;
-  }
-  .desktop-today-grid .streak-highlight progress::-webkit-progress-bar {
-    background: #0d010130;
-    border-radius: 8px;
-  }
-  .desktop-today-grid .streak-highlight progress::-webkit-progress-value {
-    background: #0d0101;
-    border-radius: 8px;
-  }
-  .desktop-today-grid .streak-highlight progress::-moz-progress-bar {
-    background: #0d0101;
-    border-radius: 8px;
-  }
+  /* The streak <progress> styling moved to progress-bars.css, where it applies
+     at every width (it used to exist only here, from 1024px up). */
 }

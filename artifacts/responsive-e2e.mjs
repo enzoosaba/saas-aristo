@@ -590,6 +590,64 @@ try {
   await page.getByRole("button", { name: "Salvar planejamento" }).click();
   await page.getByText("Planejamento salvo na sua conta.").waitFor();
   results.push("planning tabs preserve both drafts and save together");
+  // Progress bars must be drawn the same on a phone and on a desktop. The
+  // native <progress> ones must not be left to the browser's own renderer
+  // (appearance: none), and every bar's shape (radius, height) must match
+  // between 390px and 1440px.
+  {
+    const barStyle = (locator) =>
+      locator.first().evaluate((el) => {
+        const c = getComputedStyle(el);
+        return {
+          tag: el.tagName,
+          appearance: c.appearance,
+          radius: c.borderTopLeftRadius,
+          height: c.height,
+        };
+      });
+    const seen = {};
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      seen[width] = {};
+      await page.goto(base + "/");
+      await page.locator(".streak-highlight progress").waitFor();
+      seen[width].home = await barStyle(
+        page.locator(".streak-highlight progress"),
+      );
+      await page.goto(base + "/rotina");
+      await page.getByRole("button", { name: "Controle", exact: true }).click();
+      seen[width].weekly = await barStyle(page.locator(".weekly-progress"));
+      await page
+        .getByRole("button", { name: "Habit tracker", exact: true })
+        .click();
+      seen[width].habit = await barStyle(page.locator("[role=progressbar]"));
+      await page.goto(base + "/questoes");
+      await page
+        .getByRole("button", { name: "Ver barras por área", exact: true })
+        .click();
+      seen[width].area = await barStyle(page.locator(".area-bar-list progress"));
+      await page.goto(base + "/perfil");
+      seen[width].level = await barStyle(page.locator("[role=progressbar]"));
+    }
+    for (const name of Object.keys(seen[390])) {
+      assert.deepEqual(
+        seen[390][name],
+        seen[1440][name],
+        `progress bar "${name}" is drawn differently at 390px and 1440px`,
+      );
+      if (seen[390][name].tag === "PROGRESS") {
+        assert.equal(
+          seen[390][name].appearance,
+          "none",
+          `progress bar "${name}" is left to the native renderer`,
+        );
+        assert.notEqual(seen[390][name].radius, "0px", `progress "${name}"`);
+      }
+    }
+    results.push(
+      "progress bars (home streak, rotina weekly, rotina habit, questões by area, perfil level) drawn identically at 390px and 1440px; native <progress> ones do not depend on the browser renderer",
+    );
+  }
   assert.ok(
     results.every((r) => typeof r === "string"),
     "Acessibilidade: consultar violações no relatório",
