@@ -6,7 +6,7 @@ import ProgressBar from "@/components/ui/ProgressBar";
 import Avatar from "@/components/ui/Avatar";
 import { PerformancePanels } from "@/components/StudyPanels";
 import { useStudy } from "@/components/StudyProvider";
-import { progress } from "@/lib/domain";
+import { daysLabel, progress } from "@/lib/domain";
 import { resizeImageToDataUrl } from "@/lib/image";
 import { Camera, Trash2, Flame } from "lucide-react";
 export default function PerfilPage() {
@@ -180,7 +180,7 @@ export default function PerfilPage() {
         </Card>
         <Card>
           <p>Constância</p>
-          <strong className="streak-with-fire"><Flame size={24} aria-hidden="true"/>{stats.streak} dias</strong>
+          <strong className="streak-with-fire"><Flame size={24} aria-hidden="true"/>{daysLabel(stats.streak)}</strong>
         </Card>
       </div>
       <Card>

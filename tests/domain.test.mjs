@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isScheduled, dayOffset, progress } from "../src/lib/domain.ts";
+import { isScheduled, dayOffset, progress, daysLabel } from "../src/lib/domain.ts";
 const habit = {
   id: "h",
   kind: "habit",
@@ -48,4 +48,11 @@ test("streak tolerates today pending and breaks at missing day", () => {
   }));
   assert.equal(progress([], records, "2026-09-05").streak, 2);
   assert.equal(progress([], records, "2026-09-06").streak, 0);
+});
+
+test("streak label is singular for exactly one day", () => {
+  assert.equal(daysLabel(0), "0 dias");
+  assert.equal(daysLabel(1), "1 dia");
+  assert.equal(daysLabel(2), "2 dias");
+  assert.equal(daysLabel(30), "30 dias");
 });

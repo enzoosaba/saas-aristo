@@ -19,7 +19,7 @@ import {
 import { MissionsPanel, PerformancePanels } from "@/components/StudyPanels";
 import Card from "@/components/ui/Card";
 import { useStudy } from "@/components/StudyProvider";
-import { progress } from "@/lib/domain";
+import { daysLabel, progress } from "@/lib/domain";
 const shortcuts = [
   { href: "/rotina", label: "Minha rotina", icon: ListChecks },
   { href: "/planos", label: "Meu planejamento", icon: NotebookPen },
@@ -49,7 +49,7 @@ export default function InicioPage() {
         </div>
         <span className="streak-pill">
           <Flame size={18} />
-          {stats.streak} dias de constância
+          {daysLabel(stats.streak)} de constância
         </span>
       </div>
       <div

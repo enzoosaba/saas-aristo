@@ -1,6 +1,6 @@
 "use client";
 import { Flame } from "lucide-react";
-import { progress } from "@/lib/domain";
+import { daysLabel, progress } from "@/lib/domain";
 import Link from "next/link";
 import Image from "next/image";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -35,7 +35,7 @@ export default function TopBar() {
         <div className="header-progress" aria-label="Seu progresso">
           <strong className="streak-with-fire">
             <Flame size={18} aria-hidden="true" />
-            {stats.streak} dias
+            {daysLabel(stats.streak)}
           </strong>
           <span>{stats.xp} XP</span>
         </div>

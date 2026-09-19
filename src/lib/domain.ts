@@ -222,6 +222,11 @@ export function progress(
   };
 }
 
+// "0 dias", "1 dia", "2 dias": a streak of exactly one day is singular.
+export function daysLabel(count: number) {
+  return `${count} ${count === 1 ? "dia" : "dias"}`;
+}
+
 export const QUESTION_AREAS = [
   "Linguagens",
   "Humanas",
