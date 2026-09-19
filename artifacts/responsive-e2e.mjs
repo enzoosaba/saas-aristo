@@ -356,6 +356,8 @@ try {
           const trigger = document.querySelector(".more-menu-trigger");
           const tr =
             trigger && vis(trigger) ? trigger.getBoundingClientRect() : null;
+          const brand = document.querySelector(".header-brand");
+          const brr = brand && vis(brand) ? brand.getBoundingClientRect() : null;
           const progress = document.querySelector(".header-progress");
           const pr =
             progress && vis(progress) ? progress.getBoundingClientRect() : null;
@@ -380,6 +382,7 @@ try {
               w: tr.width,
               h: tr.height,
             },
+            brand: brr && { w: brr.width, h: brr.height },
             progressRight: pr ? pr.right : null,
             sidebarRoleLinks: [
               ...document.querySelectorAll(
@@ -404,6 +407,10 @@ try {
           );
         } else {
           assert.ok(nav.barVisible, `bottom bar visible ${at}`);
+          assert.ok(
+            nav.brand && nav.brand.w >= 44 && nav.brand.h >= 44,
+            `logo link is at least a 44px touch target ${at}`,
+          );
           assert.deepEqual(
             nav.tabs.map((t) => t.label),
             fixedLabels,
@@ -621,6 +628,14 @@ try {
         .getByRole("button", { name: "Habit tracker", exact: true })
         .click();
       seen[width].habit = await barStyle(page.locator("[role=progressbar]"));
+      if (width === 390)
+        assert.ok(
+          (await page
+            .locator(".personal-item-title span")
+            .first()
+            .evaluate((el) => parseFloat(getComputedStyle(el).fontSize))) >= 11,
+          "routine card tags (HÁBITO/TAREFA) are at least 11px on phones",
+        );
       await page.goto(base + "/questoes");
       await page
         .getByRole("button", { name: "Ver barras por área", exact: true })

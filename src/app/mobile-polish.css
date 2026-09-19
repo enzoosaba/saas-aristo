@@ -1,0 +1,20 @@
+/*
+ * Small phone/tablet retouches found by auditing every page at 360/390px
+ * (touch targets under 44px, text under 12px, clipped text). Only what was
+ * measured and is a safe one-line fix; nothing here changes layout or colours.
+ * Loaded last so it wins over the older layered rules.
+ */
+@media (max-width: 1023px) {
+  /* The logo link was 32x44 (responsive.css pins width:32px); a tap target
+     should be at least 44 in both directions. The 28px rabbit stays centred. */
+  .app-shell .header-brand {
+    width: 44px;
+    min-width: 44px;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 767px) {
+  /* "HÁBITO" / "TAREFA" tags on routine cards were 10px. */
+  .personal-item-title span { font-size: 11px; }
+}

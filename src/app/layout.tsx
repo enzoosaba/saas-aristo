@@ -10,6 +10,7 @@ import "./desktop-reference.css";
 import "./weekly-planner.css";
 import "./mobile-nav.css";
 import "./progress-bars.css";
+import "./mobile-polish.css";
 import ScrollEffects from "@/components/ScrollEffects";
 
 import DashboardSidebar from "@/components/ui/dashboard-sidebar";
