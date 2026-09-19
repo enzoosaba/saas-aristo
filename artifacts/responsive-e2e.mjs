@@ -51,17 +51,69 @@ try {
     },
   });
   let s = await state();
+  // /questoes is either the real question bank or, while
+  // QUESTION_BANK_ENABLED is false (src/lib/features.ts), an "Em breve" notice.
+  // The suite adapts to whichever is live: the data behaviour (API validation,
+  // versions, ownership, weighted analytics) is always exercised; the form and
+  // history UI steps run only when the screen is open, and the notice is
+  // asserted when it is not.
   await page.goto(base + "/questoes");
-  await page.getByLabel("Matéria / área").selectOption("Matemática");
-  await page
-    .getByLabel("Tópico", { exact: true })
-    .fill("Geometria plana e interpretação de situações-problema");
-  await page.getByLabel("Questões respondidas").fill("10");
-  await page.getByLabel("Acertos", { exact: true }).fill("8");
-  await page.getByRole("button", { name: "Salvar registro" }).click();
-  await page
-    .getByText("Registro salvo. Seu desempenho foi atualizado.")
-    .waitFor();
+  await page.locator("h1").first().waitFor();
+  const comingSoon =
+    (await page.locator('[data-module-state="coming-soon"]').count()) > 0;
+  const mathTopic = "Geometria plana e interpretação de situações-problema";
+  if (comingSoon) {
+    assert.equal(await page.locator("h1").innerText(), "Banco de questões");
+    await page.getByRole("heading", { name: "Em breve" }).waitFor();
+    assert.equal(
+      await page.locator(".question-form").count(),
+      0,
+      "the question form must not be reachable while the module is Em breve",
+    );
+    assert.equal(
+      await page
+        .getByRole("link", { name: "Voltar ao início" })
+        .getAttribute("href"),
+      "/",
+    );
+    // The navigation entry stays, and is the current page.
+    assert.equal(
+      await page.locator('.header-navigation a[href="/questoes"]').innerText(),
+      "Questões",
+    );
+    assert.equal(
+      await page
+        .locator('.header-navigation a[href="/questoes"]')
+        .getAttribute("aria-current"),
+      "page",
+    );
+    assert.equal(
+      (
+        await post({
+          action: "save-question",
+          question: {
+            id: crypto.randomUUID(),
+            version: 0,
+            subject: "Matemática",
+            topic: mathTopic,
+            date: s.today,
+            total: 10,
+            correct: 8,
+          },
+        })
+      ).status(),
+      200,
+    );
+  } else {
+    await page.getByLabel("Matéria / área").selectOption("Matemática");
+    await page.getByLabel("Tópico", { exact: true }).fill(mathTopic);
+    await page.getByLabel("Questões respondidas").fill("10");
+    await page.getByLabel("Acertos", { exact: true }).fill("8");
+    await page.getByRole("button", { name: "Salvar registro" }).click();
+    await page
+      .getByText("Registro salvo. Seu desempenho foi atualizado.")
+      .waitFor();
+  }
   s = await state();
   assert.equal(s.questions[0].correct, 8);
   const q = s.questions[0];
@@ -77,12 +129,21 @@ try {
     ).status(),
     409,
   );
-  await page.getByRole("button", { name: "Editar", exact: true }).click();
-  await page.getByLabel("Acertos", { exact: true }).fill("9");
-  await page.getByRole("button", { name: "Salvar registro" }).click();
-  await page
-    .getByText("Registro salvo. Seu desempenho foi atualizado.")
-    .waitFor();
+  if (comingSoon) {
+    assert.equal(
+      (
+        await post({ action: "save-question", question: { ...q, correct: 9 } })
+      ).status(),
+      200,
+    );
+  } else {
+    await page.getByRole("button", { name: "Editar", exact: true }).click();
+    await page.getByLabel("Acertos", { exact: true }).fill("9");
+    await page.getByRole("button", { name: "Salvar registro" }).click();
+    await page
+      .getByText("Registro salvo. Seu desempenho foi atualizado.")
+      .waitFor();
+  }
   assert.equal((await state()).questions[0].correct, 9);
   await post({
     action: "save-question",
@@ -96,7 +157,17 @@ try {
       correct: 45,
     },
   });
-  await page.reload();
+  if (!comingSoon) {
+    await page.reload();
+    await page.getByLabel("54% de acertos em 100 questões").waitFor();
+  }
+  // The same analytics are on the home page (Desempenho), which stays live
+  // whether or not /questoes is open.
+  await page.goto(base + "/");
+  await page
+    .locator(".home-view-switch")
+    .getByRole("button", { name: "Desempenho", exact: true })
+    .click();
   await page.getByLabel("54% de acertos em 100 questões").waitFor();
   const other = await browser.newContext();
   await other.request.post(base + "/api/auth", {
@@ -119,7 +190,7 @@ try {
   );
   await other.close();
   results.push(
-    "question creation, edit, weighted analytics, validation, concurrency and ownership",
+    `question flow (${comingSoon ? "screen shows Em breve, data through the API" : "through the screen"}): creation, edit, weighted analytics, validation, concurrency and ownership`,
   );
   await page.goto(base + "/calendario");
   await page.getByRole("button", { name: "Hoje", exact: true }).click();
@@ -336,6 +407,7 @@ try {
     const routes = [
       "/",
       "/rotina",
+      "/questoes",
       "/perfil",
       ...(role.mentor ? ["/mentoria"] : []),
     ];
@@ -560,7 +632,13 @@ try {
   results.push(
     `bottom navigation by role (student, mentor, mentor+admin) at ${navWidths.join("/")}px: ${navChecks} checks — exactly the five fixed tabs, no label cut (scrollWidth<=clientWidth) or overlap, Mentoria/Torre de controle in the top menu below 1024px and in the sidebar from 1024px`,
   );
-  await page.goto(base + "/questoes");
+  // The analytics component (radar/bars, expandable topics) is on the home
+  // page too, so it is exercised whether or not /questoes is open.
+  await page.goto(base + "/");
+  await page
+    .locator(".home-view-switch")
+    .getByRole("button", { name: "Desempenho", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Ver barras por área", exact: true })
     .click();
@@ -568,13 +646,28 @@ try {
   await page.getByRole("button", { name: "Ver radar", exact: true }).click();
   await page.locator(".topic-detail summary").first().click();
   assert.ok(await page.locator(".topic-detail[open] p").first().isVisible());
-  results.push("radar/bar views and expandable topic names");
-  await page
-    .getByRole("button", { name: "Excluir", exact: true })
-    .first()
-    .click();
-  await page.getByRole("button", { name: "Confirmar exclusão" }).click();
-  await page.getByText("Registro excluído.").waitFor();
+  results.push("radar/bar views and expandable topic names (home > Desempenho)");
+  if (comingSoon) {
+    const target = (await state()).questions[0];
+    assert.equal(
+      (
+        await post({
+          action: "delete-question",
+          id: target.id,
+          version: target.version,
+        })
+      ).status(),
+      200,
+    );
+  } else {
+    await page.goto(base + "/questoes");
+    await page
+      .getByRole("button", { name: "Excluir", exact: true })
+      .first()
+      .click();
+    await page.getByRole("button", { name: "Confirmar exclusão" }).click();
+    await page.getByText("Registro excluído.").waitFor();
+  }
   assert.equal((await state()).questions.length, 1);
   results.push("question deletion updates persisted records");
   await page.goto(base + "/planos");
@@ -636,7 +729,11 @@ try {
             .evaluate((el) => parseFloat(getComputedStyle(el).fontSize))) >= 11,
           "routine card tags (HÁBITO/TAREFA) are at least 11px on phones",
         );
-      await page.goto(base + "/questoes");
+      await page.goto(base + "/");
+      await page
+        .locator(".home-view-switch")
+        .getByRole("button", { name: "Desempenho", exact: true })
+        .click();
       await page
         .getByRole("button", { name: "Ver barras por área", exact: true })
         .click();
