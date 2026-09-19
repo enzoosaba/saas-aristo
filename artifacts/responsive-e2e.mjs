@@ -931,6 +931,98 @@ try {
       "logo: /brand/coelho-mark.png is 1254x1254, transparent background, every opaque pixel exactly #ff5d00; loads in top bar, sidebar and login with no CSS filter in both themes; the old coelho.png is gone",
     );
   }
+  // Favicon, app icons and web manifest: what the browser tab, "Add to Home
+  // Screen" and "Install app" use. Everything is fetched WITHOUT a session (an
+  // installing browser has none), declared sizes must match the real image
+  // dimensions, and no service worker may exist (push is a later decision).
+  {
+    const anonCtx = await browser.newContext({ reducedMotion: "reduce" });
+    const anonPage = await anonCtx.newPage();
+    await anonPage.goto(base + "/");
+    const links = await anonPage.evaluate(() =>
+      [...document.querySelectorAll("link[rel]")].map((l) => ({
+        rel: l.getAttribute("rel"),
+        href: l.getAttribute("href"),
+        sizes: l.getAttribute("sizes"),
+        type: l.getAttribute("type"),
+      })),
+    );
+    const fetchOk = async (href) => {
+      const response = await anonCtx.request.get(new URL(href, base).href);
+      assert.equal(response.status(), 200, `GET ${href}`);
+      return { body: await response.body(), type: response.headers()["content-type"] };
+    };
+    const pngSize = (buf) => {
+      assert.equal(buf.subarray(1, 4).toString(), "PNG", "not a PNG");
+      return `${buf.readUInt32BE(16)}x${buf.readUInt32BE(20)}`;
+    };
+
+    // <head>: manifest, favicon.ico, PNG icon and apple-touch-icon.
+    const manifestLink = links.find((l) => l.rel === "manifest");
+    assert.ok(manifestLink, "missing <link rel=manifest>");
+    const iconLinks = links.filter((l) => l.rel === "icon");
+    const icoLink = iconLinks.find((l) => l.type === "image/x-icon");
+    const pngLink = iconLinks.find((l) => l.type === "image/png");
+    const appleLink = links.find((l) => l.rel === "apple-touch-icon");
+    assert.ok(icoLink && pngLink && appleLink, "missing favicon/icon/apple-touch-icon links");
+
+    // favicon.ico: ICO container with 16, 32 and 48px images.
+    const ico = await fetchOk(icoLink.href);
+    assert.match(ico.type, /icon/);
+    assert.equal(ico.body.readUInt16LE(0), 0);
+    assert.equal(ico.body.readUInt16LE(2), 1, "not an ICO (type 1)");
+    const entries = ico.body.readUInt16LE(4);
+    const icoSizes = [];
+    for (let i = 0; i < entries; i++) {
+      const e = 6 + i * 16;
+      const offset = ico.body.readUInt32LE(e + 12);
+      const embedded = pngSize(ico.body.subarray(offset));
+      assert.equal(embedded, `${ico.body[e]}x${ico.body[e + 1]}`, "ICO entry size vs embedded image");
+      icoSizes.push(ico.body[e]);
+    }
+    assert.deepEqual(icoSizes, [16, 32, 48]);
+
+    // Tab icon and iOS icon: real dimensions equal the declared ones.
+    for (const link of [pngLink, appleLink]) {
+      const image = await fetchOk(link.href);
+      assert.match(image.type, /image\/png/);
+      assert.equal(pngSize(image.body), link.sizes, `${link.href} declared ${link.sizes}`);
+    }
+    assert.equal(appleLink.sizes, "180x180");
+
+    // Manifest.
+    const manifestResponse = await fetchOk(manifestLink.href);
+    assert.match(manifestResponse.type, /json/);
+    const manifest = JSON.parse(manifestResponse.body.toString());
+    assert.equal(manifest.name, "Plataforma Coelho");
+    assert.ok(manifest.short_name && manifest.short_name.length <= 12);
+    assert.equal(manifest.display, "standalone");
+    assert.equal(manifest.start_url, "/");
+    assert.match(manifest.background_color, /^#[0-9a-f]{6}$/i);
+    assert.match(manifest.theme_color, /^#[0-9a-f]{6}$/i);
+    const purposes = new Set();
+    for (const icon of manifest.icons) {
+      const image = await fetchOk(icon.src);
+      assert.match(image.type, /image\/png/);
+      assert.equal(pngSize(image.body), icon.sizes, `${icon.src} declared ${icon.sizes}`);
+      purposes.add(`${icon.sizes}:${icon.purpose}`);
+    }
+    for (const required of ["192x192:any", "512x512:any", "512x512:maskable"])
+      assert.ok(purposes.has(required), `manifest lacks ${required}`);
+
+    // No service worker: this is install metadata only.
+    assert.equal(
+      await anonPage.evaluate(
+        async () => (await navigator.serviceWorker.getRegistrations()).length,
+      ),
+      0,
+      "no service worker may be registered",
+    );
+    await anonCtx.close();
+    results.push(
+      "favicon and app icons: <head> links, favicon.ico with 16/32/48px, tab icon 512, apple-touch-icon 180, web manifest (Plataforma Coelho, standalone, 192/512 any + 512 maskable) — all fetched without a session with real sizes matching the declared ones; no service worker",
+    );
+  }
   assert.ok(
     results.every((r) => typeof r === "string"),
     "Acessibilidade: consultar violações no relatório",
