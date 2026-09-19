@@ -1,0 +1,84 @@
+/*
+ * Bottom navigation (<=1023px, the range where the floating dock exists): the
+ * five fixed destinations only. Role-gated destinations (Mentoria, Torre de
+ * controle) leave the bar — measured at 360px, six tabs leave ~52px each and
+ * "Calendário" alone is ~55px wide at 11px — and live in the top-bar "more"
+ * menu instead. Loaded last so it wins over the older layered navigation
+ * rules; desktop (>=1024px) keeps the sidebar exactly as before.
+ */
+.more-menu { display: none; }
+
+@media (max-width: 1023px) {
+  /* Same selectors (and specificity) as the layer being overridden in
+     responsive.css, which also forces display:flex !important on the bar.
+     flex-direction: row is set here for 768-1023px too: responsive.css only
+     resets it for <=767px, so on tablets the inherited side-rail "column"
+     stacked all tabs inside the 72px dock and left everything but the first
+     tab below the screen edge. */
+  .app-shell > .header-navigation { flex-direction: row; gap: 2px; padding: 6px 4px; }
+  .app-shell .header-navigation .header-tab--role { display: none; }
+
+  .more-menu { display: block; }
+  .more-menu-trigger {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border: 1px solid var(--border-default);
+    border-radius: 14px;
+    background: var(--surface-raised);
+    color: var(--foreground);
+  }
+  .more-menu-trigger[data-current],
+  .more-menu-trigger[aria-expanded="true"] {
+    border-color: var(--brand-orange);
+    color: var(--accent-text);
+  }
+  /* Fixed to the screen edge, not to the button: the button sits left of
+     the avatar/theme/quick-add controls, so anchoring to it would push a
+     220px panel off the left edge on narrow phones. */
+  .more-menu-panel {
+    position: fixed;
+    top: calc(var(--header-height) + 4px);
+    right: 16px;
+    z-index: 60;
+    display: grid;
+    gap: 4px;
+    min-width: 220px;
+    max-width: calc(100vw - 32px);
+    padding: 6px;
+    border: 1px solid var(--border-default);
+    border-radius: 18px;
+    background: var(--surface-card);
+    box-shadow: 0 14px 40px #0009;
+  }
+  .more-menu-panel[hidden] { display: none; }
+  .more-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    padding: 0 14px;
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .more-menu-item:hover { background: var(--surface-raised); }
+  .more-menu-item[aria-current="page"] {
+    background: var(--brand-gradient);
+    color: #241609;
+    font-weight: 650;
+  }
+}
+
+@media (max-width: 767px) {
+  .app-shell .header-navigation .header-tab { padding: 6px 1px; font-size: 11px; }
+}
+
+/* Very narrow phones (320px): keep "Calendário" inside its tab. */
+@media (max-width: 349px) {
+  .app-shell .header-navigation .header-tab { font-size: 10px; }
+}

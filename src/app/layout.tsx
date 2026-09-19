@@ -8,6 +8,7 @@ import "./mobile-reference.css";
 import "./ux-refinement.css";
 import "./desktop-reference.css";
 import "./weekly-planner.css";
+import "./mobile-nav.css";
 import ScrollEffects from "@/components/ScrollEffects";
 
 import DashboardSidebar from "@/components/ui/dashboard-sidebar";

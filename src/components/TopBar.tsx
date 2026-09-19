@@ -6,6 +6,7 @@ import Image from "next/image";
 import ThemeToggle from "@/components/ThemeToggle";
 import QuickAdd from "@/components/QuickAdd";
 import Avatar from "@/components/ui/Avatar";
+import MobileMoreMenu from "@/components/MobileMoreMenu";
 
 import { useStudy } from "./StudyProvider";
 export default function TopBar() {
@@ -39,6 +40,7 @@ export default function TopBar() {
           <span>{stats.xp} XP</span>
         </div>
         <div className="header-actions">
+          <MobileMoreMenu />
           <Link
             href="/perfil"
             className="header-account"
