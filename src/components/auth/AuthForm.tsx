@@ -48,7 +48,7 @@ export default function AuthForm({
   return (
     <main className="auth-screen">
       <div className="auth-top">
-        <span>MENTORIA COELHO</span>
+        <span>PLATAFORMA COELHO</span>
         <ThemeToggle />
       </div>
       <section className="auth-card">
@@ -56,7 +56,7 @@ export default function AuthForm({
           src="/brand/coelho.png"
           width={68}
           height={80}
-          alt="Mentoria Coelho"
+          alt="Plataforma Coelho"
         />
         <p className="eyebrow">SEU PRÓXIMO PASSO COMEÇA AQUI</p>
         <h1>{register ? "Crie seu espaço." : "Bom ter você aqui."}</h1>

@@ -774,7 +774,7 @@ test("Fase 3B RLS batch 2: tenant_settings and organizations enforce isolation a
     // platform_admin: sees and edits both tables across both tenants.
     assert.deepEqual(
       (await asActor("platform-admin", "SELECT platform_name FROM aristo.tenant_settings ORDER BY platform_name")).rows.map((r) => r.platform_name),
-      ["Mentoria Coelho", "Tenant B"],
+      ["Plataforma Coelho", "Tenant B"],
     );
     assert.deepEqual(
       (await asActor("platform-admin", "SELECT name FROM aristo.organizations ORDER BY name")).rows.map((r) => r.name),
@@ -806,7 +806,7 @@ test("Fase 3B RLS batch 2: tenant_settings and organizations enforce isolation a
     // write access into Tenant B's rows of either table.
     assert.deepEqual(
       (await asActor("tenant-admin-a", "SELECT platform_name FROM aristo.tenant_settings")).rows.map((r) => r.platform_name),
-      ["Mentoria Coelho"],
+      ["Plataforma Coelho"],
     );
     await asActor(
       "tenant-admin-a",
@@ -2523,6 +2523,53 @@ test("Fase 4A: aristo.admin_reset_password() — platform_admin only, hash only,
       fn[0].acl,
       /(^\{|,)"?=X\//,
       "PUBLIC não pode executar admin_reset_password",
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("branding: the first tenant is renamed to Plataforma Coelho, slug untouched, re-runnable, never overwrites a custom name", async () => {
+  const db = new PGlite();
+  try {
+    const files = readdirSync("supabase/migrations").sort();
+    for (const file of files)
+      await db.exec(readFileSync(`supabase/migrations/${file}`, "utf8"));
+    const rename = readFileSync(
+      "supabase/migrations/202609190022_rename_tenant_plataforma_coelho.sql",
+      "utf8",
+    );
+    assert.ok(
+      files.includes("202609190022_rename_tenant_plataforma_coelho.sql"),
+    );
+    const read = async () =>
+      (
+        await db.query(
+          `SELECT t.name, t.slug, s.platform_name, s.logo_url
+             FROM aristo.tenants t JOIN aristo.tenant_settings s ON s.tenant_id = t.id
+            WHERE t.slug = 'mentoria-coelho'`,
+        )
+      ).rows;
+    // After the whole chain: renamed in both places, slug and logo path intact.
+    assert.deepEqual(await read(), [
+      {
+        name: "Plataforma Coelho",
+        slug: "mentoria-coelho",
+        platform_name: "Plataforma Coelho",
+        logo_url: "/brand/coelho.png",
+      },
+    ]);
+    // Running it again changes nothing.
+    await db.exec(rename);
+    assert.equal((await read())[0].name, "Plataforma Coelho");
+    // A name customised by hand is not overwritten.
+    await db.exec(
+      "UPDATE aristo.tenants SET name='Nome Personalizado' WHERE slug='mentoria-coelho'; UPDATE aristo.tenant_settings SET platform_name='Nome Personalizado'",
+    );
+    await db.exec(rename);
+    assert.deepEqual(
+      (await read()).map((r) => [r.name, r.platform_name]),
+      [["Nome Personalizado", "Nome Personalizado"]],
     );
   } finally {
     await db.close();

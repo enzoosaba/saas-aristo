@@ -73,7 +73,7 @@ export async function POST(request: Request) {
           body: JSON.stringify({
             from: process.env.EMAIL_FROM,
             to: [input.email],
-            subject: "Redefina sua senha — Mentoria Coelho",
+            subject: "Redefina sua senha — Plataforma Coelho",
             text: `Abra este link para escolher uma nova senha: ${link.toString()}\n\nO link expira em 30 minutos e só pode ser usado uma vez. Se você não pediu esta alteração, ignore este e-mail.`,
           }),
           signal: AbortSignal.timeout(10000),

@@ -159,16 +159,16 @@ export default function DashboardSidebar() {
     <div className="desktop-sidebar-shell" data-collapsed={collapsed}>
       <aside className="desktop-sidebar" aria-label="Espaço da mentoria">
         <details className="desktop-workspace" ref={workspace}>
-          <summary aria-label="Opções da Mentoria Coelho">
+          <summary aria-label="Opções da Plataforma Coelho">
             <Image src="/brand/coelho.png" alt="" width={36} height={36} />
             <span>
-              <strong>Mentoria Coelho</strong>
+              <strong>Plataforma Coelho</strong>
               <small>Seu espaço de estudos</small>
             </span>
             <ChevronDown size={16} />
           </summary>
           <div className="desktop-workspace-menu">
-            <p>Mentoria Coelho</p>
+            <p>Plataforma Coelho</p>
             <Link
               href="/"
               onClick={() => workspace.current?.removeAttribute("open")}
@@ -256,7 +256,7 @@ export default function DashboardSidebar() {
             <PanelLeftClose size={20} />
           )}
         </button>
-        <span>Mentoria Coelho</span>
+        <span>Plataforma Coelho</span>
         <ChevronRight size={13} />
         <strong>{current?.title || "Meu espaço"}</strong>
       </div>

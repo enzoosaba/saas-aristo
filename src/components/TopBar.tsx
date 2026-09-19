@@ -18,7 +18,7 @@ export default function TopBar() {
         <Link
           href="/"
           className="header-brand"
-          aria-label="Coelho Mentoria, início"
+          aria-label="Plataforma Coelho, início"
         >
           <Image
             src="/brand/coelho.png"
@@ -29,7 +29,7 @@ export default function TopBar() {
             priority
           />
           <span>
-            coelho<small>MENTORIA</small>
+            coelho<small>PLATAFORMA</small>
           </span>
         </Link>
         <div className="header-progress" aria-label="Seu progresso">

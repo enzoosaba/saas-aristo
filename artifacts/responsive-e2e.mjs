@@ -760,6 +760,95 @@ try {
       "progress bars (home streak, rotina weekly, rotina habit, questões by area, perfil level) drawn identically at 390px and 1440px; native <progress> ones do not depend on the browser renderer",
     );
   }
+  // Branding: the product name is "Plataforma Coelho" everywhere it is visible,
+  // and the old "Mentoria Coelho" does not appear on any main screen. The
+  // "MENTORIA" heading of the mentor section in the sidebar is a feature name,
+  // not the brand, and stays.
+  {
+    const oldName = /mentoria coelho|coelho mentoria/i;
+    const routes = ["/", "/rotina", "/planos", "/calendario", "/questoes", "/perfil"];
+    for (const width of [390, 1023, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const route of routes) {
+        await page.goto(base + route);
+        await page.locator(".app-shell").waitFor();
+        const text = await page.evaluate(() => document.body.innerText);
+        assert.doesNotMatch(text, oldName, `old brand name visible at ${width} ${route}`);
+        assert.equal(await page.title(), "Plataforma Coelho");
+        const labels = await page.evaluate(() =>
+          [...document.querySelectorAll("[aria-label],[alt]")].map(
+            (el) => el.getAttribute("aria-label") || el.getAttribute("alt") || "",
+          ),
+        );
+        assert.equal(
+          labels.some((l) => oldName.test(l)),
+          false,
+          `old brand name in an aria-label/alt at ${width} ${route}`,
+        );
+      }
+    }
+    // Desktop: the workspace switcher and the breadcrumb carry the new name.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(base + "/");
+    await page.locator(".desktop-workspace summary strong").waitFor();
+    assert.equal(
+      await page.locator(".desktop-workspace summary strong").innerText(),
+      "Plataforma Coelho",
+    );
+    // The breadcrumb's first crumb is hidden by CSS at this width, but the
+    // markup still carries the name.
+    assert.match(
+      await page.locator(".desktop-breadcrumb").textContent(),
+      /Plataforma Coelho/,
+    );
+    // Top-bar wordmark: today its text is hidden at every width (icon only
+    // below 1024px, and the whole brand block gives way to the sidebar from
+    // 1024px), so what can be asserted is the markup, plus that it would not
+    // overflow or touch the streak/XP if it were shown.
+    for (const width of [768, 1023]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(base + "/");
+      await page.locator(".header-brand").waitFor();
+      const wordmark = await page.evaluate(() => {
+        const brand = document.querySelector(".header-brand");
+        const small = brand.querySelector("small");
+        const progress = document.querySelector(".header-progress");
+        const shown = small.getClientRects().length > 0;
+        const b = brand.getBoundingClientRect();
+        const s = small.getBoundingClientRect();
+        const p = progress && progress.getClientRects().length ? progress.getBoundingClientRect() : null;
+        return {
+          small: small.textContent,
+          shown,
+          fits: !shown || brand.scrollWidth <= brand.clientWidth + 1,
+          smallInsideBrand: !shown || s.right <= b.right + 1,
+          clearOfProgress: !shown || !p || s.right <= p.left,
+        };
+      });
+      assert.equal(wordmark.small, "PLATAFORMA");
+      assert.ok(wordmark.fits, `wordmark overflows its box at ${width}`);
+      assert.ok(wordmark.smallInsideBrand, `PLATAFORMA sticks out of the brand box at ${width}`);
+      assert.ok(wordmark.clearOfProgress, `wordmark runs into streak/XP at ${width}`);
+    }
+    // Login screen (no session): PLATAFORMA COELHO and the logo's alt text.
+    const anon = await browser.newContext({ reducedMotion: "reduce" });
+    const anonPage = await anon.newPage();
+    for (const width of [390, 1440]) {
+      await anonPage.setViewportSize({ width, height: 900 });
+      await anonPage.goto(base + "/");
+      await anonPage.locator(".auth-screen").waitFor();
+      assert.match(await anonPage.locator(".auth-top").innerText(), /PLATAFORMA COELHO/);
+      assert.equal(
+        await anonPage.locator(".auth-card img").getAttribute("alt"),
+        "Plataforma Coelho",
+      );
+      assert.doesNotMatch(await anonPage.evaluate(() => document.body.innerText), oldName);
+    }
+    await anon.close();
+    results.push(
+      "brand name: Plataforma Coelho in title, login, sidebar, breadcrumb and top-bar wordmark markup (PLATAFORMA; its text is hidden at every width today); old name absent from six routes at 390/1023/1440px",
+    );
+  }
   assert.ok(
     results.every((r) => typeof r === "string"),
     "Acessibilidade: consultar violações no relatório",

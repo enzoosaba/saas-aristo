@@ -29,7 +29,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mentoria Coelho",
+  title: "Plataforma Coelho",
   description: "Plataforma de mentoria e estudos",
 };
 

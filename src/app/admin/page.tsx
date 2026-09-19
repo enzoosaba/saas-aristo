@@ -25,7 +25,7 @@ export default function AdminPage() {
     <div className="workspace-page flex flex-col gap-5">
       <h1>Torre de controle</h1>
       <p className="page-description">
-        Gerencie contas e papéis da Mentoria Coelho.
+        Gerencie contas e papéis da Plataforma Coelho.
       </p>
       <CreateMemberCard />
       <MembersCard />
@@ -197,7 +197,7 @@ function MembersCard() {
       <div className="panel-title">
         <h2>
           <ShieldCheck size={18} />
-          Membros da Mentoria Coelho
+          Membros da Plataforma Coelho
         </h2>
       </div>
       <p role={error ? "alert" : "status"}>{status}</p>
