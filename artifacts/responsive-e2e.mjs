@@ -1136,6 +1136,118 @@ try {
       `"Mais" menu: the selected item's icon has >= 4.5:1 contrast against the orange background for both items, follows the selection (previous item reverts to the normal icon colour), stays readable on hover; dark and light, 390/1023px (${checks} selection rounds)`,
     );
   }
+  // Primary call-to-action buttons: one size and typography everywhere
+  // (44-48px tall, 12px corners, 15px/600, 20px side padding), and the "add"
+  // actions are content-sized on phones instead of stretching across the screen.
+  {
+    const measure = (p) =>
+      p.evaluate(() =>
+        [...document.querySelectorAll(".primary-button")]
+          .filter((el) => el.getClientRects().length)
+          .map((el) => {
+            const c = getComputedStyle(el);
+            const r = el.getBoundingClientRect();
+            return {
+              text: el.textContent.trim(),
+              w: Math.round(r.width),
+              h: r.height,
+              fs: c.fontSize,
+              fw: c.fontWeight,
+              br: c.borderTopLeftRadius,
+              pl: c.paddingLeft,
+              pr: c.paddingRight,
+            };
+          }),
+      );
+    let buttonChecks = 0;
+    const expectButtons = async (p, at, expected) => {
+      const list = await measure(p);
+      for (const label of expected)
+        assert.ok(list.some((b) => b.text.includes(label)), `primary button "${label}" not found (${at}); saw ${JSON.stringify(list.map((b) => b.text))}`);
+      for (const b of list) {
+        assert.ok(b.h >= 44 && b.h <= 48, `"${b.text}" is ${b.h}px tall (${at})`);
+        assert.equal(b.fs, "15px", `"${b.text}" font-size (${at})`);
+        assert.equal(b.fw, "600", `"${b.text}" font-weight (${at})`);
+        assert.equal(b.br, "12px", `"${b.text}" corner radius (${at})`);
+        assert.equal(b.pl, "20px", `"${b.text}" left padding (${at})`);
+        assert.equal(b.pr, "20px", `"${b.text}" right padding (${at})`);
+        buttonChecks++;
+      }
+      return list;
+    };
+    const go = async (p, route) => {
+      await p.goto(base + route);
+      await p.locator(".app-shell").waitFor();
+      await p.waitForTimeout(150);
+    };
+    // student pages, phone and desktop
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await go(page, "/rotina");
+      const rotina = await expectButtons(page, `rotina ${width}`, ["Adicionar hábito"]);
+      await go(page, "/planos");
+      const planos = await expectButtons(page, `planos ${width}`, ["Nova sessão", "Salvar planejamento"]);
+      await go(page, "/perfil");
+      await expectButtons(page, `perfil ${width}`, ["Salvar perfil", "Alterar senha"]);
+      await go(page, "/questoes");
+      await expectButtons(page, `questoes ${width}`, [comingSoon ? "Voltar ao início" : "Salvar registro"]);
+      // the quick-add habit form (dialog)
+      await go(page, "/rotina");
+      await page.evaluate(() =>
+        window.dispatchEvent(new CustomEvent("aristo:add", { detail: { kind: "habit", date: new Date().toISOString().slice(0, 10) } })),
+      );
+      await page.getByRole("button", { name: "Criar hábito", exact: true }).waitFor();
+      await expectButtons(page, `quick-add ${width}`, ["Criar hábito"]);
+      await page.keyboard.press("Escape");
+      if (width === 390) {
+        const add = rotina.find((b) => b.text.includes("Adicionar hábito"));
+        const session = planos.find((b) => b.text.includes("Nova sessão"));
+        assert.ok(add.w <= 240, `"Adicionar hábito" stretches across the phone (${add.w}px wide)`);
+        assert.ok(session.w <= 240, `"Nova sessão" stretches across the phone (${session.w}px wide)`);
+      }
+    }
+    // login screen
+    const anonBtn = await browser.newContext({ reducedMotion: "reduce" });
+    const anonBtnPage = await anonBtn.newPage();
+    for (const width of [390, 1440]) {
+      await anonBtnPage.setViewportSize({ width, height: 900 });
+      await anonBtnPage.goto(base + "/");
+      // ".auth-screen" is also the loading state; wait for the form itself.
+      await anonBtnPage.locator(".auth-card .primary-button").waitFor();
+      await expectButtons(anonBtnPage, `login ${width}`, ["Entrar"]);
+    }
+    await anonBtn.close();
+    // mentor / admin pages
+    const mentorBtn = await browser.newContext({ reducedMotion: "reduce" });
+    const mentorEmail = `btn-mentor-${Date.now()}@example.test`;
+    assert.equal(
+      (await mentorBtn.request.post(base + "/api/auth", { headers: { Origin: base }, data: { action: "register", name: "Botoes Mentor", email: mentorEmail, password: "Testando-2026!" } })).status(),
+      201,
+    );
+    await asOwner("UPDATE users SET role='mentor' WHERE email=?", [mentorEmail]);
+    const mentorPage = await mentorBtn.newPage();
+    await mentorPage.route("**/api/study", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const res = await route.fetch();
+      const json = await res.json();
+      json.platformAdmin = true;
+      await route.fulfill({ response: res, json });
+    });
+    await mentorPage.route("**/api/admin", (route) =>
+      route.request().method() === "GET" ? route.fulfill({ json: { members: [] } }) : route.fulfill({ json: { ok: true } }),
+    );
+    for (const width of [390, 1440]) {
+      await mentorPage.setViewportSize({ width, height: 900 });
+      await go(mentorPage, "/mentoria");
+      await expectButtons(mentorPage, `mentoria ${width}`, ["Adicionar aluno"]);
+      await go(mentorPage, "/admin");
+      await expectButtons(mentorPage, `admin ${width}`, ["Criar conta"]);
+    }
+    await mentorBtn.close();
+    results.push(
+      `primary buttons: ${buttonChecks} button measurements across login, rotina, planos, perfil, questões, quick-add, mentoria and admin at 390/1440px — all 44-48px tall, 12px corners, 15px/600, 20px padding; "Adicionar hábito" and "Nova sessão" are content-sized (<= 240px) on phones`,
+    );
+  }
   assert.ok(
     results.every((r) => typeof r === "string"),
     "Acessibilidade: consultar violações no relatório",

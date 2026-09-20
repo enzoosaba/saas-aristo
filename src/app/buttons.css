@@ -1,0 +1,42 @@
+/*
+ * Primary call-to-action buttons: ONE size and typography for all of them.
+ *
+ * Every CTA in the app (login, "Adicionar hábito", "Nova sessão", "Salvar
+ * perfil", "Alterar senha", "Adicionar aluno", "Criar conta", the quick-add and
+ * planner forms, ...) is a .primary-button, but the class had been re-defined by
+ * ~8 older layers: 14px/650, 6px corners (the only 6px controls in the app —
+ * segmented controls are 12px, the icon buttons 14px), 46-52px tall, and a
+ * couple of them stretched to the full screen width. The look here is the one the
+ * rest of the controls already use: 44px (the touch-target minimum), 12px corners,
+ * 15px/600. Colours, gradient, icon ink and hover are untouched (theme.css).
+ *
+ * The selector repeats the class so it beats every older layer, including the
+ * 3-class ".home-section-content .reference-reminder .primary-button".
+ */
+:is(.app-shell, .auth-screen) .primary-button.primary-button.primary-button {
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  gap: 8px;
+}
+
+/* "Add" actions are content-sized. On phones they used to stretch across the
+   whole screen (358x48 for "Adicionar hábito", floating over the list and the
+   search field, 324x48 for "Nova sessão"). Form submits (Entrar, Salvar, ...)
+   keep the width their forms give them. */
+@media (max-width: 1023px) {
+  .app-shell .primary-button.routine-add.routine-add {
+    left: auto;
+    right: 16px;
+    width: auto;
+    max-width: none;
+    margin: 0;
+  }
+  .app-shell .weekly-heading .primary-button.primary-button {
+    width: auto;
+    justify-content: center;
+  }
+}
