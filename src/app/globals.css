@@ -194,7 +194,6 @@ body { background:var(--background); }
 }
 .profile-cover img { width:115px; height:115px; object-fit:contain; }
 .profile-cover span { font-size:12px; letter-spacing:3px; color:#ffbc79; }
-.profile-identity>div:nth-child(2) { margin-top:-35px; position:relative; border:5px solid #1b1b20; background:#33241b; color:#ffd29b; }
 .profile-identity h1 { font-size:23px; letter-spacing:-.5px; }
 .profile-summary .study-card { background:linear-gradient(135deg,#2a2119,#1b191c); border-color:#ff861530; padding:25px; }
 .profile-summary .text-2xl { font-size:48px; line-height:1.2; margin:10px 0; letter-spacing:-2px; }

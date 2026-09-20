@@ -1400,6 +1400,144 @@ try {
       `iPhone: ${fieldChecks} text fields (rotina, planos, perfil, quick-add, planner form, login, mentoria, admin forms) all >= 16px at 390/767px so iOS does not zoom on focus; the home page opens at the top and stays there on a direct load, when switching route from four scrolled pages and on a reload (iPhone-sized touch viewport)`,
     );
   }
+  // Profile card ("Personalização do perfil"): the photo on top, the name and
+  // tagline below, nothing over the photo, at every width and in both themes;
+  // photo change/removal and the name edit keep working.
+  {
+    const profileCtx = await browser.newContext({ reducedMotion: "reduce" });
+    assert.equal(
+      (
+        await profileCtx.request.post(base + "/api/auth", {
+          headers: { Origin: base },
+          data: { action: "register", name: "Maria Aparecida Souza", email: `profile-card-${Date.now()}@example.test`, password: "Testando-2026!" },
+        })
+      ).status(),
+      201,
+    );
+    const profilePage = await profileCtx.newPage();
+    const tinyPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const measureCard = () =>
+      profilePage.evaluate(() => {
+        const rect = (el) => {
+          const r = el.getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, w: r.width, h: r.height };
+        };
+        const parse = (c) => {
+          const m = c.match(/rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?/);
+          return m ? { rgb: [Number(m[1]), Number(m[2]), Number(m[3])], a: m[4] === undefined ? 1 : Number(m[4]) } : null;
+        };
+        const bgOf = (el) => {
+          for (let n = el; n; n = n.parentElement) {
+            const c = parse(getComputedStyle(n).backgroundColor);
+            if (c && c.a > 0.95) return c.rgb;
+          }
+          return [255, 255, 255];
+        };
+        const lum = ([r, g, b]) => {
+          const f = (v) => {
+            const c = v / 255;
+            return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+          };
+          return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+        };
+        const contrast = (el) => {
+          const fg = parse(getComputedStyle(el).color).rgb;
+          const [hi, lo] = [lum(fg), lum(bgOf(el))].sort((x, y) => y - x);
+          return (hi + 0.05) / (lo + 0.05);
+        };
+        const identity = document.querySelector(".profile-identity");
+        const photo = document.querySelector(".profile-avatar-edit");
+        const text = identity.children[1];
+        const name = text.querySelector("h2");
+        const tagline = text.querySelector("p");
+        const camera = document.querySelector(".avatar-edit-button");
+        const p = rect(photo);
+        const hits = [[0.5, 0.5], [0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.5, 0.15]].map(([fx, fy]) => {
+          const el = document.elementFromPoint(p.left + p.w * fx, p.top + p.h * fy);
+          return !!el && !!el.closest(".profile-avatar-edit");
+        });
+        const cr = rect(camera);
+        const camHit = document.elementFromPoint(cr.left + cr.w / 2, cr.top + cr.h / 2);
+        const nr = rect(name);
+        const nameHit = document.elementFromPoint(nr.left + nr.w / 2, nr.top + nr.h / 2);
+        const ts = getComputedStyle(text);
+        const img = photo.querySelector("img");
+        return {
+          vw: innerWidth,
+          box: rect(identity),
+          photo: p,
+          text: rect(text),
+          photoHits: hits,
+          cameraClickable: !!camHit && !!camHit.closest(".avatar-edit-button"),
+          nameOnTop: !!nameHit && !!nameHit.closest(".profile-identity > div:nth-child(2)"),
+          textMarginTop: ts.marginTop,
+          textBorder: ts.borderTopWidth,
+          textOverflow: text.scrollWidth > text.clientWidth + 1,
+          nameContrast: contrast(name),
+          taglineContrast: contrast(tagline),
+          hasImg: !!img,
+          imgLoaded: img ? img.complete && img.naturalWidth > 0 : null,
+          removeVisible: !![...text.querySelectorAll("button")].find((b) => b.textContent.includes("Remover foto") && b.getClientRects().length),
+        };
+      });
+    let cardChecks = 0;
+    for (const withPhoto of [false, true]) {
+      for (const width of [360, 390, 767, 1440]) {
+        await profilePage.setViewportSize({ width, height: 900 });
+        await profilePage.goto(base + "/perfil");
+        await profilePage.locator(".profile-identity").waitFor();
+        if (withPhoto && width === 360) {
+          await profilePage.setInputFiles('input[type="file"]', { name: "avatar.png", mimeType: "image/png", buffer: tinyPng });
+          await profilePage.getByText("Foto de perfil atualizada.", { exact: true }).waitFor();
+        }
+        if (withPhoto) await profilePage.locator(".profile-avatar img").waitFor();
+        for (const theme of ["dark", "light"]) {
+          await profilePage.evaluate((t) => {
+            localStorage.setItem("aristo-theme", t);
+            document.documentElement.dataset.theme = t;
+          }, theme);
+          await profilePage.waitForTimeout(150);
+          const at = `${withPhoto ? "with photo" : "initials"} ${theme} ${width}`;
+          const m = await measureCard();
+          assert.ok(m.text.top >= m.photo.bottom - 0.5, `text block overlaps the photo (${at}): photo bottom ${m.photo.bottom}, text top ${m.text.top}`);
+          assert.ok(m.photo.w >= 90 && m.photo.h >= 90, `photo is too small (${at}): ${m.photo.w}x${m.photo.h}`);
+          for (const [what, r] of [["photo", m.photo], ["text", m.text]])
+            assert.ok(r.left >= m.box.left - 0.5 && r.right <= m.box.right + 0.5 && r.left >= 0 && r.right <= m.vw, `${what} sticks out of its box or the screen (${at})`);
+          assert.ok(m.photoHits.every(Boolean), `something covers the photo (${at}): ${m.photoHits}`);
+          assert.ok(m.cameraClickable, `the camera button is covered (${at})`);
+          assert.ok(m.nameOnTop, `the name is not the top element at its own centre (${at})`);
+          assert.equal(m.textMarginTop, "0px", `text block still has a negative/odd top margin (${at})`);
+          assert.equal(m.textBorder, "0px", `text block still has a border (${at})`);
+          assert.equal(m.textOverflow, false, `text overflows its block (${at})`);
+          assert.ok(m.nameContrast >= 4.5, `name contrast ${m.nameContrast.toFixed(2)} (${at})`);
+          assert.ok(m.taglineContrast >= 4.5, `tagline contrast ${m.taglineContrast.toFixed(2)} (${at})`);
+          if (withPhoto) {
+            assert.ok(m.hasImg && m.imgLoaded, `the photo did not load (${at})`);
+            assert.ok(m.removeVisible, `"Remover foto" is not visible (${at})`);
+          }
+          cardChecks++;
+        }
+      }
+    }
+    // The behaviour behind the card is unchanged: remove the photo, edit the name.
+    await profilePage.setViewportSize({ width: 390, height: 900 });
+    await profilePage.goto(base + "/perfil");
+    await profilePage.getByRole("button", { name: "Remover foto", exact: true }).click();
+    await profilePage.getByText("Foto de perfil removida.", { exact: true }).waitFor();
+    assert.equal(await profilePage.locator(".profile-avatar img").count(), 0, "photo removed, initials shown");
+    await profilePage.locator('input[name="name"]').fill("Maria A. Souza");
+    await profilePage.getByRole("button", { name: "Salvar perfil" }).click();
+    await profilePage.getByText("Perfil atualizado.", { exact: true }).waitFor();
+    assert.equal(await profilePage.locator(".profile-identity h2").innerText(), "Maria A. Souza");
+    assert.equal(await profilePage.locator('input[type="email"], input[disabled]').first().isDisabled(), true, "the e-mail field stays read-only");
+    await profileCtx.close();
+    results.push(
+      `profile card: photo above and text below with no overlap, photo complete (96px, nothing covers it, camera button clickable), name/tagline contrast >= 4.5:1, no overflow — ${cardChecks} checks with initials and with an uploaded photo at 360/390/767/1440px in both themes; photo removal and name edit still work`,
+    );
+  }
   assert.ok(
     results.every((r) => typeof r === "string"),
     "Acessibilidade: consultar violações no relatório",

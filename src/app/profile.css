@@ -1,0 +1,41 @@
+/*
+ * "Personalização do perfil" card on /perfil: the photo on top, the text below,
+ * nothing on top of the photo.
+ *
+ * Cause of the overlap: globals.css/theme.css still had a rule for
+ * ".profile-identity > div:nth-child(2)" (margin-top:-35px, a 5px border and its own
+ * background) written for an older markup whose first child was a cover banner and
+ * whose second child was the identity card meant to overlap it. The markup changed —
+ * the first child is now the photo and the second the name/tagline block — but the
+ * rule kept applying, pulling the text block 35px up over the photo and hiding it
+ * (and the camera button). Those two rules are removed; this is the layout.
+ */
+.profile-identity {
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 20px;
+  text-align: center;
+}
+/* The ranking list also uses .profile-avatar (60px); only this card gets the big one. */
+.profile-identity .profile-avatar {
+  width: 96px;
+  height: 96px;
+  font-size: 32px;
+}
+.profile-identity > div:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+.profile-identity h2 {
+  margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.profile-identity p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+}

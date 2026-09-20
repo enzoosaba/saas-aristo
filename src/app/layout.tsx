@@ -12,6 +12,7 @@ import "./mobile-nav.css";
 import "./progress-bars.css";
 import "./mobile-polish.css";
 import "./buttons.css";
+import "./profile.css";
 import ScrollEffects from "@/components/ScrollEffects";
 
 import DashboardSidebar from "@/components/ui/dashboard-sidebar";

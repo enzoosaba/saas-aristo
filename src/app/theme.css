@@ -83,7 +83,6 @@ html[data-theme] .ranking-podium { background:var(--surface-card); }
 html[data-theme] .podium-avatar { background:var(--surface-warm); border-color:var(--border-warm); color:var(--accent-text); }
 html[data-theme] .podium-step>strong { color:var(--accent-text); }
 html[data-theme] .skip-link { background:var(--surface-card); color:var(--foreground); }
-html[data-theme] .profile-identity>div:nth-child(2) { border-color:var(--surface-card); background:var(--active-surface); color:var(--accent-text); }
 html[data-theme] .workspace-page :is(.text-ink\/60,.text-ink\/50,.text-ink\/40) { color:var(--text-secondary); }
 html[data-theme] .workspace-page :is(.text-accent,.text-accent-dark) { color:var(--accent-text); background-image:none; }
 html[data-theme] .workspace-page :is(.bg-black\/5,.bg-black\/8,.bg-black\/10) { background:var(--surface-raised); }
