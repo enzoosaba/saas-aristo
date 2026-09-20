@@ -1023,6 +1023,119 @@ try {
       "favicon and app icons: <head> links, favicon.ico with 16/32/48px, tab icon 512, apple-touch-icon 180, web manifest (Plataforma Coelho, standalone, 192/512 any + 512 maskable) — all fetched without a session with real sizes matching the declared ones; no service worker",
     );
   }
+  // "Mais" menu: the icon of the SELECTED item (orange background) must have
+  // real contrast against that background — every icon otherwise gets the
+  // orange-gradient stroke, the same colour as the selected item — and this
+  // must follow the selection, not be tied to one item.
+  {
+    const ctxMenu = await browser.newContext({ reducedMotion: "reduce" });
+    const emailMenu = `menu-contrast-${Date.now()}@example.test`;
+    assert.equal(
+      (
+        await ctxMenu.request.post(base + "/api/auth", {
+          headers: { Origin: base },
+          data: { action: "register", name: "Menu Contraste", email: emailMenu, password: "Testando-2026!" },
+        })
+      ).status(),
+      201,
+    );
+    await asOwner("UPDATE users SET role='mentor' WHERE email=?", [emailMenu]);
+    const menuPage = await ctxMenu.newPage();
+    await menuPage.route("**/api/study", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const res = await route.fetch();
+      const json = await res.json();
+      json.platformAdmin = true;
+      await route.fulfill({ response: res, json });
+    });
+    await menuPage.route("**/api/admin", (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({ json: { members: [] } })
+        : route.fulfill({ json: { ok: true } }),
+    );
+    const readMenu = () =>
+      menuPage.evaluate(() => {
+        const lum = (rgb) => {
+          const [r, g, b] = rgb.map((v) => {
+            const c = v / 255;
+            return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        const ratio = (a, b) => {
+          const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+          return (hi + 0.05) / (lo + 0.05);
+        };
+        const stops = (
+          getComputedStyle(document.documentElement).getPropertyValue("--brand-gradient").match(/#[0-9a-f]{6}/gi) || []
+        ).map((h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)));
+        return [...document.querySelectorAll(".more-menu-item")].map((a) => {
+          const svg = a.querySelector("svg");
+          const stroke = getComputedStyle(svg).stroke;
+          const m = stroke.match(/rgba?\((\d+), (\d+), (\d+)/);
+          const rgb = m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+          return {
+            label: a.textContent.trim(),
+            current: a.getAttribute("aria-current") === "page",
+            stroke,
+            bg: getComputedStyle(a).backgroundImage.includes("gradient"),
+            minContrast: rgb && stops.length ? Math.min(...stops.map((s) => ratio(rgb, s))) : null,
+          };
+        });
+      });
+    const openMenu = async () => {
+      await menuPage.locator(".more-menu-trigger").click();
+      await menuPage.locator(".more-menu-panel").waitFor({ state: "visible" });
+    };
+    let checks = 0;
+    for (const theme of ["dark", "light"]) {
+      for (const width of [390, 1023]) {
+        await menuPage.setViewportSize({ width, height: 800 });
+        await menuPage.goto(base + "/mentoria");
+        await menuPage.locator(".more-menu-trigger").waitFor();
+        await menuPage.evaluate((t) => {
+          localStorage.setItem("aristo-theme", t);
+          document.documentElement.dataset.theme = t;
+        }, theme);
+        const at = `${theme} ${width}`;
+        await openMenu();
+        let items = await readMenu();
+        // 1. Mentoria is current: icon has contrast; Torre de controle keeps the normal colour.
+        const m1 = items.find((i) => i.label === "Mentoria");
+        const t1 = items.find((i) => i.label === "Torre de controle");
+        assert.ok(m1.current && !t1.current, `Mentoria must be current (${at})`);
+        assert.ok(m1.bg, `current item keeps the orange background (${at})`);
+        assert.ok(m1.minContrast >= 4.5, `current icon contrast ${m1.minContrast?.toFixed(2)} < 4.5 vs the orange background (${at}): stroke ${m1.stroke}`);
+        assert.notEqual(t1.stroke, m1.stroke, `non-current icon must keep its normal colour (${at})`);
+        assert.ok(!t1.bg, `non-current item has no orange background (${at})`);
+        // hover on the current item must not turn it dark-on-dark
+        await menuPage.locator(".more-menu-item", { hasText: "Mentoria" }).hover();
+        const hovered = (await readMenu()).find((i) => i.label === "Mentoria");
+        assert.ok(hovered.bg && hovered.minContrast >= 4.5, `current item stays readable on hover (${at})`);
+        // 2. The selection moves: Torre de controle becomes current, Mentoria reverts.
+        const normalStroke = t1.stroke;
+        await menuPage.locator(".more-menu-item", { hasText: "Torre de controle" }).click();
+        await menuPage.waitForURL("**/admin");
+        await menuPage.locator(".more-menu-trigger").waitFor();
+        await openMenu();
+        items = await readMenu();
+        const m2 = items.find((i) => i.label === "Mentoria");
+        const t2 = items.find((i) => i.label === "Torre de controle");
+        assert.ok(t2.current && !m2.current, `Torre de controle must be current (${at})`);
+        assert.ok(t2.minContrast >= 4.5, `Torre de controle icon contrast ${t2.minContrast?.toFixed(2)} (${at}): stroke ${t2.stroke}`);
+        assert.equal(m2.stroke, normalStroke, `Mentoria reverts to the normal icon colour (${at})`);
+        assert.ok(!m2.bg, `Mentoria loses the orange background (${at})`);
+        // back to Mentoria, so the next round starts from a known page
+        await menuPage.locator(".more-menu-item", { hasText: "Mentoria" }).click();
+        await menuPage.waitForURL("**/mentoria");
+        checks += 2;
+      }
+    }
+    await ctxMenu.close();
+    results.push(
+      `"Mais" menu: the selected item's icon has >= 4.5:1 contrast against the orange background for both items, follows the selection (previous item reverts to the normal icon colour), stays readable on hover; dark and light, 390/1023px (${checks} selection rounds)`,
+    );
+  }
   assert.ok(
     results.every((r) => typeof r === "string"),
     "Acessibilidade: consultar violações no relatório",

@@ -67,11 +67,19 @@
     white-space: nowrap;
   }
   .more-menu-item:hover { background: var(--surface-raised); }
+  /* Selected item: same dark-on-orange ink as the selected tab of the bottom
+     bar (theme.css: .header-tab.is-current -> #0d0101). Every icon gets the
+     orange-gradient stroke from globals.css (.app-shell .lucide), which is the
+     very colour of this item's background, so the icon must follow the text
+     colour here. This is driven by aria-current, so it follows the selection:
+     the item that stops being current goes back to the normal icon colour and
+     the new current item gets this one. */
   .more-menu-item[aria-current="page"] {
     background: var(--brand-gradient);
-    color: #241609;
+    color: #0d0101;
     font-weight: 650;
   }
+  .app-shell .more-menu-item[aria-current="page"] .lucide { stroke: currentColor; }
 }
 
 @media (max-width: 767px) {
