@@ -17,4 +17,15 @@
 @media (max-width: 767px) {
   /* "HÁBITO" / "TAREFA" tags on routine cards were 10px. */
   .personal-item-title span { font-size: 11px; }
+
+  /* iPhone Safari zooms into any text field whose font is under 16px when it
+     takes focus, and does not zoom back out when the field loses it (nor when
+     the app navigates to another page, since this is a single-page app), so the
+     next screen stays magnified and shifted, cut off at the top. Eight fields
+     were 13px: the aluno e-mail on /mentoria, name/e-mail/passwords on /perfil,
+     search and date on /rotina, date on /planos. 16px is the threshold; zoom is
+     NOT disabled (maximum-scale would break pinch-zoom accessibility). */
+  .app-shell :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) {
+    font-size: 16px;
+  }
 }

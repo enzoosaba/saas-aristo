@@ -1248,6 +1248,158 @@ try {
       `primary buttons: ${buttonChecks} button measurements across login, rotina, planos, perfil, questões, quick-add, mentoria and admin at 390/1440px — all 44-48px tall, 12px corners, 15px/600, 20px padding; "Adicionar hábito" and "Nova sessão" are content-sized (<= 240px) on phones`,
     );
   }
+  // iPhone: (a) no text field may be under 16px on a phone — iOS Safari zooms
+  // into such a field on focus and the zoom survives navigation inside this
+  // single-page app, leaving the next screen magnified and cut off at the top;
+  // (b) the app's own scrolling behaves in both ways of arriving at the home
+  // page (switching route, and loading/reloading it directly).
+  {
+    const iphone = {
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 3,
+      isMobile: true,
+      hasTouch: true,
+      reducedMotion: "reduce",
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+    };
+    const fieldSizes = (p) =>
+      p.evaluate(() =>
+        [...document.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea')]
+          .filter((el) => el.getClientRects().length && getComputedStyle(el).visibility !== "hidden")
+          .map((el) => ({
+            what: `${el.tagName.toLowerCase()}[${el.getAttribute("type") || ""}] ${el.getAttribute("name") || el.getAttribute("aria-label") || el.placeholder || ""}`.trim(),
+            fs: parseFloat(getComputedStyle(el).fontSize),
+          })),
+      );
+    let fieldChecks = 0;
+    const expectFields = async (p, at, min) => {
+      const list = await fieldSizes(p);
+      assert.ok(list.length >= min, `expected at least ${min} text field(s) (${at}), found ${list.length}`);
+      for (const f of list) assert.ok(f.fs >= 16, `${f.what} is ${f.fs}px (${at}): iOS zooms into fields under 16px`);
+      fieldChecks += list.length;
+    };
+    const goShell = async (p, route) => {
+      await p.goto(base + route);
+      await p.locator(".app-shell").waitFor();
+      await p.waitForTimeout(200);
+    };
+
+    // student: every screen and dialog that has a text field
+    const phoneCtx = await browser.newContext(iphone);
+    const phoneEmail = `iphone-${Date.now()}@example.test`;
+    assert.equal(
+      (await phoneCtx.request.post(base + "/api/auth", { headers: { Origin: base }, data: { action: "register", name: "Aluno iPhone", email: phoneEmail, password: "Testando-2026!" } })).status(),
+      201,
+    );
+    const phonePost = (data) => phoneCtx.request.post(base + "/api/study", { headers: { Origin: base }, data });
+    const phoneToday = (await (await phoneCtx.request.get(base + "/api/study")).json()).today;
+    const phoneItems = [];
+    for (let n = 0; n < 8; n++) {
+      const id = crypto.randomUUID();
+      phoneItems.push(id);
+      await phonePost({ action: "save-item", item: { id, kind: "habit", title: `Atividade ${n + 1}`, notes: "", frequency: "Todos os dias", measure: "check", target: 1, unit: "", value: 0, date: phoneToday, time: "", priority: "Normal", done: false } });
+    }
+    for (const id of phoneItems.slice(0, 3)) await phonePost({ action: "record", id, date: phoneToday, value: 1, done: true, version: 0 });
+    await phonePost({ action: "save-question", question: { id: crypto.randomUUID(), version: 0, subject: "Matemática", topic: "Geometria plana", date: phoneToday, total: 20, correct: 14 } });
+    const phone = await phoneCtx.newPage();
+    for (const width of [390, 767]) {
+      await phone.setViewportSize({ width, height: 844 });
+      await goShell(phone, "/rotina");
+      await expectFields(phone, `rotina ${width}`, 2);
+      await goShell(phone, "/planos");
+      await expectFields(phone, `planos ${width}`, 1);
+      await goShell(phone, "/perfil");
+      await expectFields(phone, `perfil ${width}`, 4);
+      // quick-add habit form
+      await goShell(phone, "/rotina");
+      await phone.evaluate(() => window.dispatchEvent(new CustomEvent("aristo:add", { detail: { kind: "habit", date: new Date().toISOString().slice(0, 10) } })));
+      await phone.getByRole("button", { name: "Criar hábito", exact: true }).waitFor();
+      await expectFields(phone, `quick-add ${width}`, 1);
+      await phone.keyboard.press("Escape");
+      // weekly planner session form
+      await goShell(phone, "/planos");
+      await phone.getByRole("button", { name: /Nova sessão/ }).first().click();
+      await phone.getByLabel("Matéria da sessão").waitFor();
+      await expectFields(phone, `planner session form ${width}`, 3);
+      await phone.keyboard.press("Escape");
+    }
+    // login / register / recovery (no session)
+    const anonPhone = await browser.newContext(iphone);
+    const anonPhonePage = await anonPhone.newPage();
+    await anonPhonePage.goto(base + "/");
+    await anonPhonePage.locator(".auth-card .primary-button").waitFor();
+    await expectFields(anonPhonePage, "login", 2);
+    // mentor / admin screens
+    const mentorPhone = await browser.newContext(iphone);
+    const mentorPhoneEmail = `iphone-mentor-${Date.now()}@example.test`;
+    assert.equal(
+      (await mentorPhone.request.post(base + "/api/auth", { headers: { Origin: base }, data: { action: "register", name: "Mentor iPhone", email: mentorPhoneEmail, password: "Testando-2026!" } })).status(),
+      201,
+    );
+    await asOwner("UPDATE users SET role='mentor' WHERE email=?", [mentorPhoneEmail]);
+    const mentorPhonePage = await mentorPhone.newPage();
+    await mentorPhonePage.route("**/api/study", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const res = await route.fetch();
+      const json = await res.json();
+      json.platformAdmin = true;
+      await route.fulfill({ response: res, json });
+    });
+    await mentorPhonePage.route("**/api/admin", (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({ json: { members: [{ id: "u1", name: "Arthur", email: "arthur@example.test", role: "student" }] } })
+        : route.fulfill({ json: { ok: true } }),
+    );
+    await goShell(mentorPhonePage, "/mentoria");
+    await expectFields(mentorPhonePage, "mentoria", 1);
+    await goShell(mentorPhonePage, "/admin");
+    await expectFields(mentorPhonePage, "admin create form", 3);
+    await mentorPhonePage.getByRole("button", { name: /Redefinir senha de Arthur/ }).click();
+    await mentorPhonePage.getByLabel("Nova senha temporária").waitFor();
+    await expectFields(mentorPhonePage, "admin reset form", 4);
+    await anonPhone.close();
+    await mentorPhone.close();
+
+    // (b) scrolling: arriving at the home page by switching route, and by
+    // loading it directly, on an iPhone-sized touch viewport.
+    await phone.setViewportSize({ width: 390, height: 844 });
+    const scrollY = () => phone.evaluate(() => Math.round(window.scrollY));
+    const stableAtTop = async (label) => {
+      const seen = [];
+      for (let i = 0; i < 8; i++) {
+        seen.push(await scrollY());
+        await phone.waitForTimeout(250);
+      }
+      assert.ok(seen.every((v) => v === 0), `${label}: scrollY should stay at 0, saw ${seen.join(",")}`);
+    };
+    await goShell(phone, "/");
+    assert.ok((await phone.evaluate(() => document.documentElement.scrollHeight)) > 1200, "the home page must be taller than the screen for this test to mean anything");
+    await stableAtTop("direct load of the home page");
+    const tab = (name) => phone.locator(".header-navigation").getByRole("link", { name, exact: true }).click();
+    for (const [from, start] of [["Rotina", 600], ["Perfil", 1500], ["Calendário", 200], ["Questões", 100]]) {
+      await tab(from);
+      await phone.locator(".app-shell").waitFor();
+      await phone.waitForTimeout(400);
+      await phone.evaluate((y) => window.scrollTo(0, y), start);
+      await phone.waitForTimeout(200);
+      await tab("Início");
+      await phone.locator(".streak-highlight").waitFor();
+      await stableAtTop(`switching route ${from} -> Início`);
+    }
+    await goShell(phone, "/");
+    await phone.evaluate(() => window.scrollTo(0, 1100));
+    await phone.waitForTimeout(200);
+    await phone.reload();
+    await phone.locator(".streak-highlight").waitFor();
+    await stableAtTop("reloading the home page while scrolled");
+    // the scale of the visual viewport stays 1 (no zoom on the home screen)
+    assert.equal(await phone.evaluate(() => window.visualViewport.scale), 1);
+    await phoneCtx.close();
+    results.push(
+      `iPhone: ${fieldChecks} text fields (rotina, planos, perfil, quick-add, planner form, login, mentoria, admin forms) all >= 16px at 390/767px so iOS does not zoom on focus; the home page opens at the top and stays there on a direct load, when switching route from four scrolled pages and on a reload (iPhone-sized touch viewport)`,
+    );
+  }
   assert.ok(
     results.every((r) => typeof r === "string"),
     "Acessibilidade: consultar violações no relatório",
