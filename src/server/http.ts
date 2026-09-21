@@ -54,13 +54,20 @@ export async function body(request: Request) {
 export async function limit(key: string, max = 60, duration = 60000) {
   const now = Date.now();
   const connection = db();
-  await connection.prepare("DELETE FROM rate_limits WHERE until < ?").run(now);
   const hash = createHash("sha256").update(key).digest("hex");
+  // One statement. A window that has expired restarts at 1 instead of being
+  // swept first, so expired rows never need a DELETE before every request.
   const entry = (await connection
     .prepare(
-      `INSERT INTO rate_limits(key,hits,until) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET hits=rate_limits.hits+1 RETURNING hits`,
+      `INSERT INTO rate_limits(key,hits,until) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET hits=CASE WHEN rate_limits.until<? THEN 1 ELSE rate_limits.hits+1 END, until=CASE WHEN rate_limits.until<? THEN ? ELSE rate_limits.until END RETURNING hits`,
     )
-    .get(hash, now + duration)) as { hits: number };
+    .get(hash, now + duration, now, now, now + duration)) as { hits: number };
+  // housekeeping only; correctness above does not depend on it
+  if (Math.random() < 0.02)
+    await connection
+      .prepare("DELETE FROM rate_limits WHERE until < ?")
+      .run(now)
+      .catch(() => undefined);
   if (entry.hits > max)
     throw new HttpError(429, "Muitas tentativas. Aguarde alguns minutos.");
 }

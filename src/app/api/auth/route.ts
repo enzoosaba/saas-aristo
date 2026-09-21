@@ -10,6 +10,7 @@ import {
 } from "@/server/auth";
 import { db, isPostgres, transaction, withActor } from "@/server/db";
 import { body, failure, HttpError, json, limit } from "@/server/http";
+import { authBuckets, clientIp } from "@/server/rate-limit-policy";
 import {
   createProfile,
   ensureOrganizationMembership,
@@ -81,9 +82,10 @@ export async function POST(request: Request) {
       return json({ ok: true });
     }
     const data = credentials.parse(input);
-    // Shared budget is deliberately conservative without trusting forwarded client IP headers.
-    await limit("auth-global", 100, 15 * 60000);
-    await limit("auth:" + data.email, 10, 15 * 60000);
+    // Per address, per account+address and per account (see rate-limit-policy.ts):
+    // a script can no longer lock every login for everybody.
+    for (const bucket of authBuckets(data.email, clientIp(request.headers)))
+      await limit(bucket.key, bucket.max, bucket.window);
     const connection = db();
     if (data.action === "register") {
       if (!data.name) throw new HttpError(400, "Informe seu nome.");

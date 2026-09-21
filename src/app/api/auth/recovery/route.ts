@@ -2,6 +2,11 @@ import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { db, isPostgres, transaction, withActor } from "@/server/db";
 import { body, failure, HttpError, json, limit } from "@/server/http";
+import {
+  clientIp,
+  recoveryEmailBuckets,
+  recoveryIpBucket,
+} from "@/server/rate-limit-policy";
 import { passwordHash, logout } from "@/server/auth";
 
 export const runtime = "nodejs";
@@ -26,9 +31,12 @@ const inputSchema = z.discriminatedUnion("action", [
 export async function POST(request: Request) {
   try {
     const input = inputSchema.parse(await body(request));
-    await limit("recovery-global", 40, 15 * 60000);
+    const ip = clientIp(request.headers);
+    const ipBucket = recoveryIpBucket(ip);
+    await limit(ipBucket.key, ipBucket.max, ipBucket.window);
     if (input.action === "request") {
-      await limit("recovery:" + input.email, 3, 15 * 60000);
+      for (const bucket of recoveryEmailBuckets(input.email, ip))
+        await limit(bucket.key, bucket.max, bucket.window);
       if (
         !process.env.RESEND_API_KEY ||
         !process.env.EMAIL_FROM ||
