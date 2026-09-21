@@ -2,22 +2,18 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool, type PoolClient } from "pg";
 import { db as sqlite } from "./sqlite";
 import { postgresConfig, postgresSql } from "./postgres-config.mjs";
+import { currentActorId, withActor } from "./actor";
+
+// The actor mechanism lives in ./actor (no other imports, so tests can load it).
+export { withActor };
 
 type Context = { client?: PoolClient };
-type ActorContext = { userId: string | null };
 const shared = globalThis as unknown as {
   aristoPool?: Pool;
   aristoContext?: AsyncLocalStorage<Context>;
-  aristoActorContext?: AsyncLocalStorage<ActorContext>;
   aristoQueue?: Promise<void>;
 };
 const context = (shared.aristoContext ??= new AsyncLocalStorage<Context>());
-// Fase 3B: "who is making this request", threaded through to every
-// Postgres statement via SET LOCAL (see applyActorContext) so RLS policies
-// can consult it. Separate from `context` above (the transaction client)
-// on purpose — an actor can be established before a transaction exists
-// (see withActor below) and the two are set at different points.
-const actorContext = (shared.aristoActorContext ??= new AsyncLocalStorage<ActorContext>());
 export const isPostgres = () => Boolean(process.env.DATABASE_URL);
 
 // Fase 3B part 7 (cutover): the running app connects as aristo_app
@@ -53,34 +49,6 @@ async function exclusive<T>(work: () => Promise<T>): Promise<T> {
   } finally {
     release();
   }
-}
-
-// Establishes "who is acting" for every Postgres statement run inside
-// `work`, including ones not wrapped in an explicit transaction() — see
-// query() below, which opens a short-lived transaction for those
-// specifically so this can apply. Call this once per request (requireUser
-// et al.), or explicitly with a fresh id mid-transaction for the one
-// legitimate case where there is no session yet (registration minting a
-// new user's own id — see src/app/api/auth/route.ts).
-export function withActor<T>(
-  userId: string | null,
-  work: () => Promise<T>,
-): Promise<T> {
-  return actorContext.run({ userId }, work);
-}
-
-function currentActorId(): string | null {
-  return actorContext.getStore()?.userId ?? null;
-}
-
-// Sets the actor for the rest of the current async execution chain without
-// requiring a callback wrapper around every route — see currentUser() in
-// src/server/auth.ts, the single place every authenticated request passes
-// through. Node's AsyncLocalStorage.enterWith() scopes this to the current
-// context and everything that continues from it (this request), not to
-// other concurrent requests.
-export function setActor(userId: string | null) {
-  actorContext.enterWith({ userId });
 }
 
 // SET LOCAL, not SET: scoped to the current transaction only, so it can

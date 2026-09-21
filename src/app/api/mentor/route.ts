@@ -28,10 +28,8 @@ async function requireMentor(user: User) {
 export async function GET(request: Request) {
   try {
     const authUser = await requireUser();
-    // requireUser()'s actor (set deep inside currentUser()) does not
-    // reliably survive being awaited from here — see study/route.ts's
-    // same fix. requireMentor() itself does an RLS-scoped lookup, so it
-    // needs to run inside withActor() too, not just what follows it.
+    // requireMentor() itself does an RLS-scoped lookup, so it has to run
+    // inside withActor() too, not just what follows it.
     return await withActor(authUser.id, async () => {
       const user = await requireMentor(authUser);
       const url = new URL(request.url);

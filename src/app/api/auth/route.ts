@@ -8,7 +8,7 @@ import {
   logout,
   requireUser,
 } from "@/server/auth";
-import { db, isPostgres, setActor, transaction, withActor } from "@/server/db";
+import { db, isPostgres, transaction, withActor } from "@/server/db";
 import { body, failure, HttpError, json, limit } from "@/server/http";
 import {
   createProfile,
@@ -41,16 +41,9 @@ export async function POST(request: Request) {
     }
     if (input?.action === "change-password") {
       const user = await requireUser();
-      // Fase 3B pre-cutover fix: setActor()/enterWith() sets the actor for
-      // "the rest of this synchronous execution and following async calls"
-      // per Node's own docs, but empirically does NOT reliably survive from
-      // one independently-awaited operation (here, requireUser() resolving)
-      // to a later, separately-invoked one (limit(), then this whole
-      // block) — every db() call below saw a null actor without this,
-      // silently failing every RLS-scoped query. withActor() uses
-      // AsyncLocalStorage.run() instead of enterWith(), which Node's docs
-      // call the more reliable primitive, and explicitly scopes the actor
-      // to everything nested inside this one call.
+      // requireUser() only identifies the caller. withActor() is what sets the
+      // actor RLS reads (AsyncLocalStorage.run(): scoped to this callback and
+      // whatever it awaits); every RLS-scoped query below needs it.
       await withActor(user.id, async () => {
         await limit("password:" + user.id, 5, 15 * 60000);
         const change = z
@@ -97,35 +90,35 @@ export async function POST(request: Request) {
       const name = data.name;
       const password = await passwordHash(data.password);
       const id = randomUUID();
-      // Fase 3B: nobody is "logged in" yet during registration — the new
-      // account acts as itself from the moment its id is minted, so the
-      // inserts below (self-row) satisfy RLS once policies exist. Until
-      // then this is a no-op (nothing reads app.user_id yet).
-      setActor(id);
-      // Fase 0C: the account, its SaaS profile and its Tenant 01 membership
-      // are created atomically — any failure rolls back the whole signup.
-      await transaction(async () => {
-        const result = await connection
-          .prepare(
-            "INSERT OR IGNORE INTO users(id,name,email,password,created_at) VALUES(?,?,?,?,?)",
-          )
-          .run(id, name, data.email, password, Date.now());
-        if (!result.changes)
-          throw new HttpError(
-            409,
-            "Não foi possível criar a conta com esses dados. Tente entrar.",
-          );
-        await createProfile(id, name, null);
-        await syncTenantMembership(id, "student");
-        // Fase 2 prerequisite: every account needs an active organization
-        // membership to create study data once tenant_id/organization_id
-        // become required (see resolveUserScope in identity.ts) — without
-        // this, a student who registers but is never added by a mentor
-        // would be unable to use the app at all from day one.
-        await ensureOrganizationMembership(id, "STUDENT");
+      // Nobody is "logged in" yet during registration — the new account acts as
+      // itself from the moment its id is minted, so the inserts below (self-row)
+      // satisfy RLS. Everything runs inside withActor(id, ...).
+      return await withActor(id, async () => {
+        // Fase 0C: the account, its SaaS profile and its Tenant 01 membership
+        // are created atomically — any failure rolls back the whole signup.
+        await transaction(async () => {
+          const result = await connection
+            .prepare(
+              "INSERT OR IGNORE INTO users(id,name,email,password,created_at) VALUES(?,?,?,?,?)",
+            )
+            .run(id, name, data.email, password, Date.now());
+          if (!result.changes)
+            throw new HttpError(
+              409,
+              "Não foi possível criar a conta com esses dados. Tente entrar.",
+            );
+          await createProfile(id, name, null);
+          await syncTenantMembership(id, "student");
+          // Fase 2 prerequisite: every account needs an active organization
+          // membership to create study data once tenant_id/organization_id
+          // become required (see resolveUserScope in identity.ts) — without
+          // this, a student who registers but is never added by a mentor
+          // would be unable to use the app at all from day one.
+          await ensureOrganizationMembership(id, "STUDENT");
+        });
+        await createSession(id);
+        return json({ ok: true }, 201);
       });
-      await createSession(id);
-      return json({ ok: true }, 201);
     }
     // Fase 3B part 4: no actor exists yet at this point (finding the
     // account by email *is* the point) — SELECT id,password FROM users
@@ -150,19 +143,19 @@ export async function POST(request: Request) {
     );
     if (!user || !valid)
       throw new HttpError(401, "E-mail ou senha incorretos.");
-    // Fase 3B: the credential lookup above ran with no actor (that's what
-    // it's for — see the note on the users-by-email SELECT); once the
-    // password is verified, every following query in this request is
-    // legitimately "this user acting as themselves".
-    setActor(user.id);
-    await transaction(async () => {
-      const current = (await connection
-        .prepare("SELECT password FROM users WHERE id=? FOR UPDATE")
-        .get(user.id)) as { password: string } | undefined;
-      if (!current || current.password !== user.password)
-        throw new HttpError(401, "A senha foi alterada. Entre novamente.");
-      await createSession(user.id);
-    });
+    // The credential lookup above ran with no actor (that's what it's for —
+    // see the note on the users-by-email SELECT); once the password is
+    // verified, what follows is legitimately "this user acting as themselves".
+    await withActor(user.id, () =>
+      transaction(async () => {
+        const current = (await connection
+          .prepare("SELECT password FROM users WHERE id=? FOR UPDATE")
+          .get(user.id)) as { password: string } | undefined;
+        if (!current || current.password !== user.password)
+          throw new HttpError(401, "A senha foi alterada. Entre novamente.");
+        await createSession(user.id);
+      }),
+    );
     return json({ ok: true });
   } catch (e) {
     return failure(e);

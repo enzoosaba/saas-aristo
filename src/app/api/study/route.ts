@@ -7,11 +7,8 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const user = await requireUser();
-    // requireUser() sets the actor via setActor()/enterWith() deep inside
-    // currentUser() — empirically does NOT reliably survive being awaited
-    // from a different function's continuation (see auth/route.ts's
-    // change-password fix). withActor()/.run() scopes it explicitly for
-    // everything state() does below.
+    // requireUser() only identifies the caller; withActor() is what sets the
+    // actor RLS reads, for everything state() does below.
     return json(await withActor(user.id, () => state(user)));
   } catch (e) {
     return failure(e);

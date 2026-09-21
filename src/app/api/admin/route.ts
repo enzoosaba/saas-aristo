@@ -27,10 +27,8 @@ type Member = { id: string; name: string; email: string; role: "student" | "ment
 export async function GET() {
   try {
     const authUser = await requireUser();
-    // requireUser()'s actor does not reliably survive being awaited from
-    // here (see auth/route.ts's change-password fix) — withActor() scopes
-    // it explicitly for requirePlatformAdmin()'s own RLS-scoped check and
-    // the query below.
+    // withActor() sets the actor for requirePlatformAdmin()'s own RLS-scoped
+    // check and the query below.
     return await withActor(authUser.id, async () => {
       await requirePlatformAdmin(authUser);
       const members = (await db()
