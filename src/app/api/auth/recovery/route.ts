@@ -121,9 +121,19 @@ export async function POST(request: Request) {
             400,
             "Link inválido ou expirado. Solicite um novo e-mail.",
           );
-        await db()
+        // RLS refuses a row silently (0 rows, no error). If the password did not
+        // change, fail the whole transaction — the token above is NOT consumed —
+        // instead of telling the person "Senha atualizada".
+        const updated = await db()
           .prepare("UPDATE users SET password=? WHERE id=?")
           .run(password, row.user_id);
+        if (!updated.changes) {
+          console.error("password_reset_update_no_rows");
+          throw new HttpError(
+            500,
+            "Não foi possível atualizar a senha. Tente novamente com o mesmo link.",
+          );
+        }
         await db()
           .prepare("DELETE FROM sessions WHERE user_id=?")
           .run(row.user_id);
