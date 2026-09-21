@@ -134,6 +134,12 @@ export async function POST(request: Request) {
       // set-role: users.role has no UPDATE column privilege for aristo_app
       // at all (batch 5) — aristo.set_member_role() is the one narrow,
       // gated exception, checking is_platform_admin() internally.
+      // set_member_role() updates whatever matches and returns nothing, so an id
+      // that matches nobody would look like success. Look the account up first.
+      const target = await db()
+        .prepare("SELECT id FROM users WHERE id=?")
+        .get(data.userId);
+      if (!target) throw new HttpError(404, "Conta não encontrada.");
       await db()
         .prepare("SELECT aristo.set_member_role(?,?)")
         .get(data.userId, data.role);

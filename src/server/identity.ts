@@ -69,14 +69,18 @@ export async function createProfile(
 }
 
 // Called on later edits: the profile row is guaranteed to already exist,
-// either from createProfile() above or from the Fase 0B backfill migration.
+// either from createProfile() above or from the Fase 0B backfill migration
+// (checked against the live database: every account has one). So 0 rows is not
+// "nothing to do" — it is an RLS refusal or a broken invariant, and the caller's
+// transaction must fail instead of reporting success.
 export async function updateProfileName(userId: string, fullName: string) {
   if (!isPostgres()) return;
-  await db()
+  const result = await db()
     .prepare(
       "UPDATE profiles SET full_name=?, updated_at=now() WHERE user_id=?",
     )
     .run(fullName, userId);
+  if (!result.changes) throw new HttpError(404, "Perfil não encontrado.");
 }
 
 export async function updateProfileAvatar(
@@ -84,11 +88,12 @@ export async function updateProfileAvatar(
   avatarUrl: string | null,
 ) {
   if (!isPostgres()) return;
-  await db()
+  const result = await db()
     .prepare(
       "UPDATE profiles SET avatar_url=?, updated_at=now() WHERE user_id=?",
     )
     .run(avatarUrl, userId);
+  if (!result.changes) throw new HttpError(404, "Perfil não encontrado.");
 }
 
 // Enrolls (or updates the role of) a user in Tenant 01. Never assigns

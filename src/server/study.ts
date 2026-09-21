@@ -305,10 +305,13 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
             "O tipo de acompanhamento não pode mudar após a criação.",
           );
 
-        await connection
+        // AND version=?: the version was checked above, but another writer may
+        // have got in between. 0 rows means exactly that (or an RLS refusal),
+        // never a successful save.
+        const saved = await connection
 
           .prepare(
-            "UPDATE items SET data=?,version=version+1 WHERE id=? AND user_id=?",
+            "UPDATE items SET data=?,version=version+1 WHERE id=? AND user_id=? AND version=?",
           )
 
           .run(
@@ -317,7 +320,11 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
             data.item.id,
 
             user.id,
+
+            // equal to data.item.version: checked a few lines above
+            row.version,
           );
+        if (!saved.changes) conflict();
       } else {
         if (data.item.version) throw new HttpError(404, "Item não encontrado.");
 
@@ -352,13 +359,14 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
 
       if (row.version !== data.version) conflict();
 
-      await connection
+      const archived = await connection
 
         .prepare(
-          "UPDATE items SET archived=1,version=version+1 WHERE id=? AND user_id=?",
+          "UPDATE items SET archived=1,version=version+1 WHERE id=? AND user_id=? AND version=?",
         )
 
-        .run(data.id, user.id);
+        .run(data.id, user.id, data.version);
+      if (!archived.changes) conflict();
     }
 
     if (data.action === "record") {
@@ -492,11 +500,12 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
     }
 
     if (data.action === "profile") {
-      await connection
+      const renamed = await connection
 
         .prepare("UPDATE users SET name=? WHERE id=?")
 
         .run(data.name, user.id);
+      if (!renamed.changes) throw new HttpError(404, "Perfil não encontrado.");
 
       // Fase 0C: keep aristo.profiles in sync while users.role stays the
       // source of authorization.
@@ -504,11 +513,12 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
     }
 
     if (data.action === "update-avatar") {
-      await connection
+      const updated = await connection
 
         .prepare("UPDATE users SET avatar=? WHERE id=?")
 
         .run(data.avatar, user.id);
+      if (!updated.changes) throw new HttpError(404, "Perfil não encontrado.");
 
       await updateProfileAvatar(user.id, data.avatar);
     }

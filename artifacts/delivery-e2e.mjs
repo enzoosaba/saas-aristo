@@ -891,6 +891,34 @@ try {
     assert.equal(await sessionStatus(bystander), 200);
     assert.equal(await sessionStatus(boss), 200);
     assert.equal(await loginStatus(bystander.email, password), 200);
+
+    // set-role: an id that matches nobody is a 404 (aristo.set_member_role()
+    // returns nothing, so it used to look like success); a real one still works.
+    assert.equal(
+      (
+        await post(boss, "/api/admin", {
+          action: "set-role",
+          userId: randomUUID(),
+          role: "mentor",
+        })
+      ).status(),
+      404,
+    );
+    assert.equal(
+      (
+        await post(boss, "/api/admin", {
+          action: "set-role",
+          userId: victim.user.id,
+          role: "mentor",
+        })
+      ).status(),
+      200,
+    );
+    assert.equal(
+      (await admin("SELECT role FROM users WHERE id=?", [victim.user.id]))[0]
+        .role,
+      "mentor",
+    );
     await adminPage.close();
     for (const who of [boss, victim, bystander]) await who.ctx.close();
   }
