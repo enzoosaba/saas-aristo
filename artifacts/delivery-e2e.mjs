@@ -919,6 +919,87 @@ try {
         .role,
       "mentor",
     );
+
+    // Audit trail: the three sensitive admin actions each leave one row
+    // (who, what, on whom, tenant, before/after) — and nothing else does: not the
+    // refused attempts above (403 by a non-admin, 400/404 by the admin), and no
+    // password, hash or token in any of it.
+    const temporaryPassword = "Senha-Auditoria-2026!";
+    const auditedEmail = `audit-created-${Date.now()}@example.test`;
+    assert.equal(
+      (
+        await post(boss, "/api/admin", {
+          action: "create-member",
+          name: "AuditCriado",
+          email: auditedEmail,
+          password: temporaryPassword,
+          role: "student",
+        })
+      ).status(),
+      201,
+    );
+    const createdId = (
+      await admin("SELECT id FROM users WHERE email=?", [auditedEmail])
+    )[0].id;
+    const trailSql =
+      "SELECT user_id, action, entity_type, entity_id, tenant_id, old_value, new_value, created_at FROM audit_logs WHERE user_id=? ORDER BY id";
+    const trail = await admin(trailSql, [boss.user.id]);
+    assert.deepEqual(
+      trail.map((r) => r.action),
+      ["admin.reset-password", "admin.set-role", "admin.create-member"],
+      "one row per successful admin action, none for the refused ones",
+    );
+    assert.deepEqual(
+      trail.map((r) => r.entity_id),
+      [victim.user.id, victim.user.id, createdId],
+    );
+    assert.ok(trail.every((r) => r.entity_type === "user" && r.tenant_id));
+    assert.ok(
+      trail.every((r) => Date.now() - new Date(r.created_at).getTime() < 10 * 60000),
+    );
+    assert.deepEqual(trail[1].old_value, { role: "student" });
+    assert.deepEqual(trail[1].new_value, { role: "mentor" });
+    assert.deepEqual(trail[2].new_value, {
+      email: auditedEmail,
+      name: "AuditCriado",
+      role: "student",
+    });
+    assert.equal(
+      (await admin("SELECT count(*) AS n FROM audit_logs WHERE user_id=?", [victim.user.id]))[0].n.toString(),
+      "0",
+      "a non-admin's refused attempt writes nothing",
+    );
+    const everything = JSON.stringify(await admin("SELECT * FROM audit_logs"));
+    for (const secret of [temporaryPassword, "Temporaria-2026!", password])
+      assert.ok(!everything.includes(secret), "no password in the audit log");
+    assert.ok(!/[0-9a-f]{32}:[0-9a-f]{128}/.test(everything), "no password hash in the audit log");
+
+    // A broken audit log must not undo, or fail, an action that already happened.
+    await admin("ALTER TABLE aristo.audit_logs RENAME TO audit_logs_offline");
+    try {
+      assert.equal(
+        (
+          await post(boss, "/api/admin", {
+            action: "set-role",
+            userId: victim.user.id,
+            role: "student",
+          })
+        ).status(),
+        200,
+      );
+    } finally {
+      await admin("ALTER TABLE aristo.audit_logs_offline RENAME TO audit_logs");
+    }
+    assert.equal(
+      (await admin("SELECT role FROM users WHERE id=?", [victim.user.id]))[0].role,
+      "student",
+      "the role change stands even though its audit row could not be written",
+    );
+    assert.equal(
+      (await admin(trailSql, [boss.user.id])).length,
+      3,
+      "and no row appeared for it",
+    );
     await adminPage.close();
     for (const who of [boss, victim, bystander]) await who.ctx.close();
   }
@@ -928,7 +1009,7 @@ try {
   );
   if (pg)
     console.log(
-      "Delivery (Postgres only): admin password reset — non-admin refused, invalid requests, page flow, target signed out everywhere, old password dead, new one works, others unaffected — passed.",
+      "Delivery (Postgres only): admin password reset, set-role 404, and the audit trail (one row per admin action, none for refused ones, no secrets, survives a broken log) — passed.",
     );
 } finally {
   await browser.close();

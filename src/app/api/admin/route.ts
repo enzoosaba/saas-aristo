@@ -4,6 +4,7 @@ import { requireUser, passwordHash } from "@/server/auth";
 import { db, transaction, withActor } from "@/server/db";
 import { body, failure, HttpError, json, limit } from "@/server/http";
 import { isPlatformAdmin } from "@/server/authorization";
+import { recordAdminAction } from "@/server/audit";
 import {
   createProfile,
   ensureOrganizationMembership,
@@ -108,6 +109,12 @@ export async function POST(request: Request) {
             data.role === "mentor" ? "MENTOR" : "STUDENT",
           );
         });
+        await recordAdminAction({
+          actorId: authUser.id,
+          action: "admin.create-member",
+          targetUserId: id,
+          newValue: { email: data.email, name: data.name, role: data.role },
+        });
         return json({ ok: true }, 201);
       }
       if (data.action === "reset-password") {
@@ -129,6 +136,11 @@ export async function POST(request: Request) {
           changed: boolean;
         };
         if (!row?.changed) throw new HttpError(404, "Conta não encontrada.");
+        await recordAdminAction({
+          actorId: authUser.id,
+          action: "admin.reset-password",
+          targetUserId: data.userId,
+        });
         return json({ ok: true });
       }
       // set-role: users.role has no UPDATE column privilege for aristo_app
@@ -136,13 +148,20 @@ export async function POST(request: Request) {
       // gated exception, checking is_platform_admin() internally.
       // set_member_role() updates whatever matches and returns nothing, so an id
       // that matches nobody would look like success. Look the account up first.
-      const target = await db()
-        .prepare("SELECT id FROM users WHERE id=?")
-        .get(data.userId);
+      const target = (await db()
+        .prepare("SELECT id, role FROM users WHERE id=?")
+        .get(data.userId)) as { id: string; role: string } | undefined;
       if (!target) throw new HttpError(404, "Conta não encontrada.");
       await db()
         .prepare("SELECT aristo.set_member_role(?,?)")
         .get(data.userId, data.role);
+      await recordAdminAction({
+        actorId: authUser.id,
+        action: "admin.set-role",
+        targetUserId: data.userId,
+        oldValue: { role: target.role },
+        newValue: { role: data.role },
+      });
       return json({ ok: true });
     });
   } catch (e) {

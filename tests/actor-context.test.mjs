@@ -78,7 +78,7 @@ const AUTH_CALLS = new Set(["requireUser", "requireMentor", "requirePlatformAdmi
 const HANDLERS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 // Modules whose exports read or write the database. Anything imported from them is
 // "database work" (except the names below, which are pure or self-scoped).
-const DB_MODULES = [/^@\/server\/(db|study|mentor|identity|authorization)$/, /^\.\/(db|study|mentor|identity|authorization)$/];
+const DB_MODULES = [/^@\/server\/(db|study|mentor|identity|authorization|audit)$/, /^\.\/(db|study|mentor|identity|authorization|audit)$/];
 const NOT_DB_WORK = new Set(["withActor", "isPostgres"]);
 
 const parse = (text, name) => ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

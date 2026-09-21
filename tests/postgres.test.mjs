@@ -30,6 +30,7 @@ test("all application SQL compiles against the PostgreSQL migration", async () =
       "src/server/mentor.ts",
       "src/server/identity.ts",
       "src/server/authorization.ts",
+      "src/server/audit.ts",
       "src/app/api/auth/route.ts",
       "src/app/api/mentor/route.ts",
       "src/app/api/health/route.ts",
