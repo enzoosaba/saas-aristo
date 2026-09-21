@@ -5,15 +5,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The single lockfile is pnpm-lock.yaml; the pnpm version comes from the
+      # "packageManager" field of package.json (pnpm/action-setup reads it).
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run verify
-      - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run verify
+      - run: pnpm run build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run test:e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -52,17 +55,20 @@ jobs:
       APP_DATABASE_URL: postgresql://aristo_app:ciOnlyAppPassword2026@localhost:5432/aristo_test
     steps:
       - uses: actions/checkout@v4
+      # The single lockfile is pnpm-lock.yaml; the pnpm version comes from the
+      # "packageManager" field of package.json (pnpm/action-setup reads it).
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run db:migrate
-      - run: npm run db:migrate
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run db:migrate
+      - run: pnpm run db:migrate
       - run: node scripts/provision-app-role.mjs --password ciOnlyAppPassword2026 --print-url
-      - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - run: pnpm run build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run test:e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:

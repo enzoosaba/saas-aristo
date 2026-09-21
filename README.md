@@ -10,16 +10,16 @@ Veja [o roteiro de entrega e configuração do Supabase](docs/ENTREGA-22-SETEMBR
 
 ## Executar
 
-Requer Node >=22.18 e npm. O projeto usa `node:sqlite`, que pode emitir aviso experimental dependendo da versão do Node. Não requer PostgreSQL ou credenciais externas para executar localmente.
+Requer Node >=22.18 e pnpm (a versão fica fixada no campo `packageManager` do `package.json`; o lockfile único é o `pnpm-lock.yaml`). O projeto usa `node:sqlite`, que pode emitir aviso experimental dependendo da versão do Node. Não requer PostgreSQL ou credenciais externas para executar localmente.
 
 ```sh
-npm ci
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-Abra http://localhost:3000 e escolha **Criar minha conta**. Não existe senha padrão nem conta administrativa embutida. A senha deve ter entre 12 e 128 caracteres.
+Abra http://localhost:3000 e escolha **Criar minha conta**. Não existe senha padrão nem conta administrativa embutida. A senha deve ter entre 8 e 128 caracteres.
 
-No PowerShell, use `npm.cmd` caso a política local bloqueie `npm.ps1`.
+No PowerShell, use `pnpm.cmd` caso a política local bloqueie `pnpm.ps1`.
 
 ## Variáveis
 
@@ -40,9 +40,9 @@ Não publique arquivos `.env`, banco, backups ou cookies. `.gitignore` exclui da
 ## Build e produção local
 
 ```sh
-npm run verify
-npm run build
-npm start
+pnpm verify
+pnpm build
+pnpm start
 ```
 
 O launcher prepara os assets e executa o servidor standalone do Next. Contas e dados ficam no banco, não no localStorage. Cookies de sessão são Secure em produção; use HTTPS no host público. Localhost é usado pelos testes de navegador.
@@ -116,9 +116,9 @@ Dockerfile / .dockerignore / .env.example
 ## Testes
 
 ```sh
-npm run verify
-npm run build
-npm run test:e2e
+pnpm verify
+pnpm build
+pnpm test:e2e
 ```
 
 `verify` executa ESLint, TypeScript e testes de regras de negócio. O E2E inicia o build de produção em porta 3101 com um banco novo, testa contas reais de teste e encerra o servidor. No Windows usa Edge instalado; no Linux instale `npx playwright install --with-deps chromium`.
@@ -129,7 +129,7 @@ Para auditoria local com o servidor já iniciado:
 
 ```sh
 # TEST_BASE_URL deve apontar para o servidor em execução.
-npm run test:quality
+pnpm test:quality
 ```
 
 O script usa porta DevTools 9225, testa ambos os temas em 390/1440 px com axe e mede Lighthouse na página inicial autenticada. Salva os resultados em test-results. Esses testes são locais, não uma auditoria do host público; Lighthouse não fornece uma nota de segurança da aplicação. Scripts antigos em artifacts registram a etapa visual anterior e não são a suíte vigente de autenticação.
@@ -155,7 +155,7 @@ Docker não está disponível neste ambiente; o Dockerfile não foi executado aq
 ## Backup e recuperação
 
 ```sh
-npm run backup
+pnpm backup
 ```
 
 Cria uma cópia consistente em `data/backups` usando a API de backup SQLite e valida `PRAGMA integrity_check`. O processo não sobrescreve backups existentes. Testado com banco de E2E. Agende a execução e copie backups para armazenamento privado fora do host.
