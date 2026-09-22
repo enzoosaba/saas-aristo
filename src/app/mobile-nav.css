@@ -86,7 +86,17 @@
   .app-shell .header-navigation .header-tab { padding: 6px 1px; font-size: 11px; }
 }
 
-/* Very narrow phones (320px): keep "Calendário" inside its tab. */
+/* Very narrow phones (320px): keep "Calendário" inside its tab. The first real
+   CI run (Linux/plain Chromium; local dev on Windows uses msedge, see
+   responsive-e2e.mjs) failed this exact check — "Calendário" fit locally with
+   only ~4px to spare (10px font, 6px 1px padding), and a different platform's
+   font rasterizer was enough to tip it over. This trims horizontal padding to
+   0 and tightens the label slightly (9.5px, -0.2px letter-spacing), roughly
+   doubling the margin (~8-10px), verified under both msedge and plain
+   Chromium locally — the exact sub-pixel difference from a real Linux
+   Chromium still can't be reproduced on this machine, so the next CI run is
+   what actually confirms it. */
 @media (max-width: 349px) {
-  .app-shell .header-navigation .header-tab { font-size: 10px; }
+  .app-shell .header-navigation .header-tab { font-size: 9.5px; padding-inline: 0; }
+  .app-shell .header-navigation .header-tab span { letter-spacing: -0.2px; }
 }
