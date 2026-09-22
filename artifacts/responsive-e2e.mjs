@@ -1538,6 +1538,67 @@ try {
       `profile card: photo above and text below with no overlap, photo complete (96px, nothing covers it, camera button clickable), name/tagline contrast >= 4.5:1, no overflow — ${cardChecks} checks with initials and with an uploaded photo at 360/390/767/1440px in both themes; photo removal and name edit still work`,
     );
   }
+  // Camera button on "Meu perfil": its background is the same brand-gradient every
+  // .lucide icon gets a matching stroke for by default, so in dark mode the icon used
+  // to be painted with the very same gradient as its own background (invisible, not
+  // just low-contrast — getComputedStyle can't even resolve it to a flat colour, it is
+  // a live reference to the SVG gradient). Dark only: light mode's icon was already a
+  // flat, legible colour and must stay exactly as it is.
+  {
+    const cameraCtx = await browser.newContext({ reducedMotion: "reduce" });
+    await cameraCtx.request.post(base + "/api/auth", {
+      headers: { Origin: base },
+      data: {
+        action: "register",
+        name: "Camera Contraste",
+        email: `camera-contrast-${Date.now()}@example.test`,
+        password: "Testando-2026!",
+      },
+    });
+    const cameraPage = await cameraCtx.newPage();
+    await cameraPage.setViewportSize({ width: 390, height: 900 });
+    await cameraPage.goto(base + "/perfil");
+    await cameraPage.locator(".avatar-edit-button").waitFor();
+    const cameraStroke = () =>
+      cameraPage.evaluate(() => {
+        const lum = (rgb) => {
+          const [r, g, b] = rgb.map((v) => {
+            const c = v / 255;
+            return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        const ratio = (a, b) => {
+          const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+          return (hi + 0.05) / (lo + 0.05);
+        };
+        const stops = (
+          getComputedStyle(document.documentElement).getPropertyValue("--brand-gradient").match(/#[0-9a-f]{6}/gi) || []
+        ).map((h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)));
+        const stroke = getComputedStyle(document.querySelector(".avatar-edit-button svg")).stroke;
+        const m = stroke.match(/rgba?\((\d+), (\d+), (\d+)/);
+        const rgb = m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+        return { stroke, minContrast: rgb && stops.length ? Math.min(...stops.map((s) => ratio(rgb, s))) : null };
+      });
+    for (const theme of ["dark", "light"]) {
+      await cameraPage.evaluate((t) => {
+        localStorage.setItem("aristo-theme", t);
+        document.documentElement.dataset.theme = t;
+      }, theme);
+      await cameraPage.waitForTimeout(150);
+      const result = await cameraStroke();
+      if (theme === "dark") {
+        assert.doesNotMatch(result.stroke, /url\(/, "dark: camera icon must resolve to a flat colour, not the background's own gradient");
+        assert.ok(result.minContrast >= 4.5, `dark: camera icon contrast ${result.minContrast?.toFixed(2)} < 4.5 (${result.stroke})`);
+      } else {
+        assert.equal(result.stroke, "rgb(177, 64, 0)", "light theme's camera icon colour must not change");
+      }
+    }
+    await cameraCtx.close();
+    results.push(
+      "camera button on Meu perfil: dark theme icon is a flat, >= 4.5:1-contrast colour instead of the same gradient as its own background; light theme unchanged",
+    );
+  }
   assert.ok(
     results.every((r) => typeof r === "string"),
     "Acessibilidade: consultar violações no relatório",

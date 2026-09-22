@@ -98,6 +98,15 @@ html[data-theme] .chart-legend .legend-line { border-color:var(--brand-orange); 
 html[data-theme] .chart-legend .legend-bar { background:#ff5d0040; }
 html[data-theme] .topic-rank { color:var(--accent-text); background:var(--active-surface); }
 html[data-theme="light"] .app-shell .lucide { stroke:#b14000; }
+/* Camera button on "Meu perfil": .avatar-edit-button's background is the same
+   brand orange gradient every .lucide icon gets by default (globals.css:
+   .app-shell .lucide { stroke:url(#coelho-accent) }), so in dark mode the icon was
+   the same colour as its own background (orange on orange). Light mode already
+   overrides every icon's stroke to a darker #b14000 (the rule above), which reads
+   fine here too, so this is scoped to dark only. currentColor picks up the button's
+   own ink (#241609, functional.css), the same dark-on-orange treatment already used
+   for .header-tab.is-current below. */
+html[data-theme="dark"] .avatar-edit-button .lucide { stroke: currentColor; }
 html[data-theme] :is(.primary-button,.lesson-cta,.quick-add-trigger,.period-switch button[aria-pressed="true"],.workspace-page button[type="submit"]) .lucide { stroke:#0d0101; }
 html[data-theme] .workspace-page button[aria-pressed="false"].text-transparent .lucide { stroke:transparent; }
 .theme-toggle { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; border:1px solid var(--border-default); background:var(--surface-raised); border-radius:14px; color:var(--foreground); }
