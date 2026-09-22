@@ -1499,6 +1499,81 @@ test("Fase 3B RLS batch 4: organization_members enforces isolation, self-promoti
   }
 });
 
+test("Fase 4A (bug found by the first real CI run): a mentor promoted by hand (users.role only, organization_members left STUDENT) can still complete their own upsert to MENTOR", async () => {
+  const db = new PGlite();
+  try {
+    const { tenantAId, orgAId, asActor, asOwner } =
+      await buildTwoTenantFixture(db);
+
+    // Exactly what a normal registration produces (every account gets a
+    // STUDENT row), then exactly what scripts/set-mentor.mjs does — an
+    // owner-level UPDATE of users.role ONLY, never touching
+    // organization_members (confirmed by reading that script). No app code
+    // and no aristo_app statement is involved in producing this state; it is
+    // the pre-existing condition the bug needs, built directly as the owner.
+    await db.exec(`
+      INSERT INTO aristo.users(id,name,email,password,role,created_at)
+        VALUES ('stale-mentor','Stale','stale@example.test','x','student',0);
+    `);
+    await db.query(
+      "INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES($1,'stale-mentor','STUDENT')",
+      [tenantAId],
+    );
+    await db.query(
+      "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role,status) VALUES($1,$2,'stale-mentor','STUDENT','active')",
+      [tenantAId, orgAId],
+    );
+    await db.exec("UPDATE aristo.users SET role='mentor' WHERE id='stale-mentor'"); // scripts/set-mentor.mjs, as the owner
+
+    // This is ensureOrganizationMembership()'s exact statement (src/server/
+    // identity.ts), which addStudent()'s first call runs for the mentor's own
+    // row. Before the fix, USING's self-clause required the PRE-update row to
+    // already be member_role='MENTOR' — it is still 'STUDENT' here — so
+    // neither USING branch matched and this raised "row-level security
+    // policy" instead of upgrading the row, exactly the failure the review's
+    // real CI run hit on the unrelated "mentor-a" fixture account.
+    const upsert =
+      "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role,status) VALUES($1,$2,$3,$4,'active') ON CONFLICT(organization_id,user_id) DO UPDATE SET member_role=excluded.member_role, status='active', updated_at=now()";
+    await asActor("stale-mentor", upsert, [tenantAId, orgAId, "stale-mentor", "MENTOR"]);
+    assert.equal(
+      (await asOwner("SELECT member_role, status FROM aristo.organization_members WHERE user_id='stale-mentor'")).rows[0].member_role,
+      "MENTOR",
+      "o próprio upsert do mentor deve promover a linha, mesmo partindo de STUDENT",
+    );
+
+    // The account can now do what a real mentor does next: add a student —
+    // the actual scenario the CI run's fixture ("mentor-a") failed on.
+    await asActor(
+      "stale-mentor",
+      "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role) VALUES($1,$2,'student-a','STUDENT') ON CONFLICT(organization_id,user_id) DO UPDATE SET member_role='STUDENT', status='active', updated_at=now()",
+      [tenantAId, orgAId],
+    );
+
+    // The escalation guard this branch relies on (has_mentor_role, i.e.
+    // users.role='mentor') is untouched: a plain student in the exact same
+    // starting shape still cannot self-upsert to MENTOR.
+    await db.exec(`
+      INSERT INTO aristo.users(id,name,email,password,role,created_at)
+        VALUES ('still-student','Still','still@example.test','x','student',0);
+    `);
+    await db.query(
+      "INSERT INTO aristo.tenant_members(tenant_id,user_id,role) VALUES($1,'still-student','STUDENT')",
+      [tenantAId],
+    );
+    await db.query(
+      "INSERT INTO aristo.organization_members(tenant_id,organization_id,user_id,member_role,status) VALUES($1,$2,'still-student','STUDENT','active')",
+      [tenantAId, orgAId],
+    );
+    await assert.rejects(
+      asActor("still-student", upsert, [tenantAId, orgAId, "still-student", "MENTOR"]),
+      /row-level security/i,
+      "aluno sem users.role='mentor' continua sem conseguir virar MENTOR por essa via",
+    );
+  } finally {
+    await db.close();
+  }
+});
+
 test("Fase 3B RLS batch 5: users enforces self-only visibility/writability, role/email are column-locked", async () => {
   const db = new PGlite();
   try {
