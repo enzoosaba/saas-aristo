@@ -2137,7 +2137,7 @@ test("Fase 3B RLS batch 7: rate_limits is fully open to aristo_app (no per-user 
   }
 });
 
-test("Fase 3B RLS batch 7: demo_batches (self SELECT, admin-only writes) and audit_logs (admin-only everything)", async () => {
+test("Fase 3B RLS batch 7: demo_batches (self SELECT, admin-only writes) and audit_logs (admin-only append/read)", async () => {
   const db = new PGlite();
   try {
     const { asActor, asOwner } = await buildTwoTenantFixture(db);
@@ -2182,7 +2182,7 @@ test("Fase 3B RLS batch 7: demo_batches (self SELECT, admin-only writes) and aud
       0,
     );
 
-    // --- audit_logs: admin-only on every command, nothing else touches it.
+    // --- audit_logs: admin-only append/read; UPDATE/DELETE have no app privilege.
     await asOwner(
       "INSERT INTO aristo.audit_logs(action,entity_type) VALUES('test.action','test')",
     );
@@ -2203,16 +2203,14 @@ test("Fase 3B RLS batch 7: demo_batches (self SELECT, admin-only writes) and aud
       ),
       /row-level security/i,
     );
-    assert.equal(
-      (
-        await asActor("mentor-a", "DELETE FROM aristo.audit_logs WHERE action='test.action'")
-      ).rowCount,
-      0,
-    );
-    await asActor("platform-admin", "DELETE FROM aristo.audit_logs WHERE action='test.action'");
+    for (const actor of ["mentor-a", "platform-admin"])
+      await assert.rejects(
+        asActor(actor, "DELETE FROM aristo.audit_logs WHERE action='test.action'"),
+        { code: "42501" },
+      );
     assert.equal(
       (await asOwner("SELECT 1 FROM aristo.audit_logs WHERE action='test.action'")).rows.length,
-      0,
+      1,
     );
   } finally {
     await db.close();

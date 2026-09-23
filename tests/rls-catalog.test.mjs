@@ -16,7 +16,8 @@ import { PGlite } from "@electric-sql/pglite";
 // Invariants:
 //   functions  — never executable by PUBLIC; SECURITY DEFINER ones pin search_path
 //   tables     — RLS enabled AND forced; a policy for each of SELECT/INSERT/UPDATE/
-//                DELETE; no policy that applies to PUBLIC; not owned by the app role
+//                DELETE (audit_logs is explicitly append-only: SELECT/INSERT only);
+//                no policy that applies to PUBLIC; not owned by the app role
 //   app role   — aristo_app is not superuser, does not bypass RLS, cannot create
 //                roles/databases, and cannot reach the migrations bookkeeping table
 //   users      — aristo_app cannot UPDATE role or email (only name/avatar/password)
@@ -64,8 +65,11 @@ export async function auditCatalog(db) {
     const policies = (await db.query("SELECT polcmd, polroles FROM pg_policy WHERE polrelid = $1", [t.oid])).rows;
     if (!policies.length) violations.push(`table ${name} has no policy at all`);
     const covered = new Set(policies.map((p) => (p.polcmd === "*" ? "all" : COMMANDS[p.polcmd])));
+    const requiredCommands = t.relname === "audit_logs" ? ["SELECT", "INSERT"] : Object.values(COMMANDS);
+    if (t.relname === "audit_logs" && policies.some(p => ["*", "w", "d"].includes(p.polcmd)))
+      violations.push(`table ${name} has a write policy that breaks append-only auditing`);
     if (!covered.has("all"))
-      for (const command of Object.values(COMMANDS)) if (!covered.has(command)) violations.push(`table ${name} has no ${command} policy (decide it explicitly, even if the answer is "nobody")`);
+      for (const command of requiredCommands) if (!covered.has(command)) violations.push(`table ${name} has no ${command} policy (decide it explicitly, even if the answer is "nobody")`);
     if (policies.some((p) => p.polroles.includes(0) || p.polroles.includes("0") || p.polroles.includes(0n)))
       violations.push(`table ${name} has a policy that applies to PUBLIC`);
   }
@@ -150,6 +154,8 @@ test("the audit fails for each way a new object could ship unprotected (delibera
       ALTER ROLE aristo_app BYPASSRLS;
       GRANT UPDATE (role, email) ON aristo.users TO aristo_app;
       GRANT SELECT ON aristo.migrations TO aristo_app;
+      -- 8. audit events accidentally become mutable again through a policy
+      CREATE POLICY mutant_audit_update ON aristo.audit_logs FOR UPDATE TO aristo_app USING (true);
     `);
     const { violations } = await auditCatalog(db);
     const text = violations.join("\n");
@@ -165,6 +171,7 @@ test("the audit fails for each way a new object could ship unprotected (delibera
       /aristo_app can UPDATE aristo\.users\.role/,
       /aristo_app can UPDATE aristo\.users\.email/,
       /aristo_app can reach aristo\.migrations/,
+      /aristo\.audit_logs has a write policy that breaks append-only auditing/,
     ];
     for (const pattern of expected) assert.match(text, pattern);
     // and it did not cry wolf about the healthy objects
