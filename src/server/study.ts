@@ -26,7 +26,25 @@ import { z } from "zod";
 
 type ItemRow = { id: string; data: string; version: number };
 
-export async function state(user: User): Promise<StudyState> {
+export function state(user: User): Promise<StudyState> {
+  // Fase 4B (performance): this used to be 8 independent statements. Under
+  // Postgres, any db() call NOT already inside a transaction() opens its own
+  // short-lived BEGIN/SET LOCAL actor/COMMIT sequence (see database.ts's
+  // query()) — 4 network round trips each. Wrapping the whole read in one
+  // transaction() turns "8 statements x 4 round trips" into "1 open + 8
+  // statements + 1 close". This does NOT give the 8 reads a single consistent
+  // snapshot: Postgres's default READ COMMITTED isolation still lets each
+  // statement see whatever is latest-committed as of that statement, not a
+  // snapshot fixed at BEGIN, so a concurrent write can still land between two
+  // of these reads exactly as it could before. transaction() no-ops on
+  // SQLite when nothing needs batching, and correctly detects (and skips
+  // opening a second one for) an already-open transaction, so this is safe
+  // to call from within study/route.ts's POST handler too, after mutate()'s
+  // own transaction has already committed.
+  return transaction(async () => stateWithinTransaction(user));
+}
+
+async function stateWithinTransaction(user: User): Promise<StudyState> {
   const connection = db();
 
   const items = (await connection
