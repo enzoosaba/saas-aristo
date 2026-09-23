@@ -47,6 +47,7 @@ try {
     "artifacts/weekly-e2e.mjs",
     "artifacts/responsive-e2e.mjs",
     "artifacts/production-e2e.mjs",
+    "artifacts/missions-toggle-e2e.mjs",
   ]) {
     const child = spawn(process.execPath, [script], {
       stdio: "inherit",

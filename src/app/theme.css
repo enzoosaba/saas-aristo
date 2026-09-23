@@ -67,6 +67,9 @@ html[data-theme] :is(.quick-add-form input,.quick-add-form select,.quick-add-for
 html[data-theme] :is(input,textarea)::placeholder { color:var(--text-muted); }
 html[data-theme] :is(.quick-add-options>button,.profile-cover,.podium-step) { background:var(--surface-warm); color:var(--foreground); border-color:var(--border-warm); }
 html[data-theme] :is(.dialog-close,.period-switch,.period-filter,.workspace-page>.rounded-full,.mobile-study-links a,.personal-counter button,.avatar,.stat-value .level-badge,.topic-rank,.mission-icon,.shortcut-icon,.lesson-icon) { background:var(--surface-raised); color:var(--foreground); border-color:var(--border-default); }
+/* Missions paint their buttons, not a second surface behind them. Keep the
+   border width so the existing desktop geometry remains unchanged. */
+html[data-theme] .missions-panel .period-switch { background:none; border-color:transparent; }
 html[data-theme] .period-switch button { color:var(--text-secondary); }
 html[data-theme] :is(.period-switch button[aria-pressed="true"],.primary-button,.lesson-cta,.workspace-page button[type="submit"],.quick-add-trigger) { background:var(--brand-gradient); color:#0d0101; -webkit-text-fill-color:#0d0101; border-color:transparent; box-shadow:none; }
 html[data-theme] :is(.primary-button:hover,.lesson-cta:hover,.quick-add-trigger:hover) { background:var(--brand-gradient); filter:brightness(1.06); }
