@@ -128,7 +128,11 @@ export default function WeeklyPlanner() {
           <h2 id="weekly-title">Organização semanal</h2>
           <p>Distribua suas sessões e construa uma semana possível.</p>
         </div>
-        <button className="primary-button" onClick={() => open(selected)}>
+        <button
+          className="primary-button"
+          aria-expanded={Boolean(draft && !draft.version)}
+          onClick={() => open(selected)}
+        >
           <Plus size={20} />
           Nova sessão
         </button>

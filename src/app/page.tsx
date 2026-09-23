@@ -72,7 +72,7 @@ export default function InicioPage() {
         ))}
       </div>
       {view === "today" && (
-        <div className="desktop-today-grid">
+        <div key="today" className="desktop-today-grid motion-tab-panel">
           <section className="streak-highlight">
             <div className="section-heading">
               <h2>Sua constância, em movimento</h2>
@@ -163,13 +163,16 @@ export default function InicioPage() {
         </div>
       )}
       {view === "performance" && (
-        <div className="home-section-content">
+        <div
+          key="performance"
+          className="home-section-content motion-tab-panel"
+        >
           <QuestionAnalytics />
           <PerformancePanels />
         </div>
       )}
       {view === "goals" && (
-        <div className="home-section-content">
+        <div key="goals" className="home-section-content motion-tab-panel">
           <div className="section-intro">
             <h2>Seu plano de constância</h2>
             <p>

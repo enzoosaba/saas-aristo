@@ -1,6 +1,8 @@
 @import "tailwindcss";
 :root { --background:#101013; --foreground:#f3f1ee; color-scheme:dark;
- --brand-gradient:linear-gradient(115deg,#ffd000 0%,#ff8615 45%,#ff3c19 100%); }
+ --brand-gradient:linear-gradient(115deg,#ffd000 0%,#ff8615 45%,#ff3c19 100%);
+ --motion-fast:150ms; --motion-base:250ms; --motion-slow:400ms;
+ --ease-out:cubic-bezier(.16,1,.3,1); --ease-in:cubic-bezier(.7,0,.84,0); }
 @theme inline {
  --color-primary:var(--brand-orange); --color-secondary:var(--surface-raised);
  --color-background:var(--background); --color-foreground:var(--foreground); --font-sans:var(--font-onest); --font-mono:var(--font-geist-mono);

@@ -57,7 +57,9 @@ export function MissionsPanel() {
     (sum, d) => sum + data.items.filter((i) => isScheduled(i, d)).length,
     0,
   );
-  const completion = totalUnits ? Math.round((doneUnits / totalUnits) * 100) : 0;
+  const completion = totalUnits
+    ? Math.round((doneUnits / totalUnits) * 100)
+    : 0;
   return (
     <Card className="missions-panel">
       <div className="panel-title">
@@ -74,7 +76,10 @@ export function MissionsPanel() {
           </button>
         </div>
       </div>
-      <div className="mobile-mission-content">
+      <div
+        key={`mobile-${week ? "week" : "today"}`}
+        className="mobile-mission-content motion-tab-panel"
+      >
         <div className="mission-summary-line">
           <strong>{completion}% concluídas</strong>
           <span>
@@ -124,7 +129,10 @@ export function MissionsPanel() {
           </Link>
         </div>
       </div>
-      <div className="desktop-mission-content">
+      <div
+        key={`desktop-${week ? "week" : "today"}`}
+        className="desktop-mission-content motion-tab-panel"
+      >
         <p className="panel-description">
           {week
             ? `${doneWeek} realizações nos últimos 7 dias.`

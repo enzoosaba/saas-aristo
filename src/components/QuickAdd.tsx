@@ -32,6 +32,7 @@ function QuickAddContent() {
   const [creationDate, setCreationDate] = useState(localDate());
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
   useEffect(() => {
     if (kind) form.current?.querySelector<HTMLInputElement>("input")?.focus();
   }, [kind]);
@@ -135,6 +136,7 @@ function QuickAddContent() {
         className="quick-add-trigger"
         aria-label="Adicionar hábito ou tarefa"
         aria-haspopup="dialog"
+        aria-expanded={isOpen}
         onClick={open}
       >
         <Plus size={28} />
@@ -143,7 +145,9 @@ function QuickAddContent() {
         ref={dialog}
         className="quick-add-dialog"
         aria-labelledby="quick-add-title"
+        onToggle={(event) => setIsOpen(event.currentTarget.open)}
         onClose={() => {
+          setIsOpen(false);
           setEditing(null);
           if (returnFocus.current?.isConnected) returnFocus.current.focus();
           else trigger.current?.focus();

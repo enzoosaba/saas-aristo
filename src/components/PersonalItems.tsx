@@ -14,12 +14,13 @@ export default function PersonalItems({
   date?: string;
   showAll?: boolean;
 }) {
-  const { data, mutate, setEditing } = useStudy();
+  const { data, mutate, setEditing, showToast } = useStudy();
   const selected = date || data.today;
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [completedPulse, setCompletedPulse] = useState<string | null>(null);
   const items = data.items
     .filter(
       (i) =>
@@ -46,6 +47,11 @@ export default function PersonalItems({
         done,
         version: record?.version || 0,
       });
+      const completed = item.kind === "habit" && (done || value >= item.target);
+      if (completed) {
+        setCompletedPulse(item.id);
+        showToast(`${item.title} concluído. Muito bem!`);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível atualizar.");
     } finally {
@@ -169,7 +175,14 @@ export default function PersonalItems({
                   disabled={!!busy || blocked}
                   onClick={() => void update(item, 0, !done)}
                 >
-                  <Check size={18} />
+                  <Check
+                    size={18}
+                    className={
+                      done && completedPulse === item.id
+                        ? "habit-check-complete"
+                        : undefined
+                    }
+                  />
                   {done ? "Concluído" : "Marcar como concluído"}
                 </button>
               )}

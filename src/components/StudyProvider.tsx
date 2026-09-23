@@ -17,6 +17,7 @@ type Context = {
   editing: StudyItem | null;
   setEditing: (item: StudyItem | null) => void;
   logout: () => Promise<void>;
+  showToast: (message: string) => void;
 };
 const StudyContext = createContext<Context | null>(null);
 export function useStudy() {
@@ -32,6 +33,31 @@ export default function StudyProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<StudyItem | null>(null);
   const [resetToken, setResetToken] = useState("");
+  const [toast, setToast] = useState<{
+    id: number;
+    message: string;
+    closing: boolean;
+  } | null>(null);
+  const toastTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const showToast = useCallback((message: string) => {
+    toastTimers.current.forEach(clearTimeout);
+    const id = Date.now();
+    setToast({ id, message, closing: false });
+    toastTimers.current = [
+      setTimeout(
+        () =>
+          setToast((current) =>
+            current?.id === id ? { ...current, closing: true } : current,
+          ),
+        3000,
+      ),
+      setTimeout(
+        () => setToast((current) => (current?.id === id ? null : current)),
+        3250,
+      ),
+    ];
+  }, []);
+  useEffect(() => () => toastTimers.current.forEach(clearTimeout), []);
   useEffect(() => {
     const readToken = () => {
       const token = new URLSearchParams(window.location.hash.slice(1)).get(
@@ -155,12 +181,22 @@ export default function StudyProvider({ children }: { children: ReactNode }) {
   if (!data) return <AuthForm onSuccess={refresh} connectionError={error} />;
   return (
     <StudyContext.Provider
-      value={{ data, mutate, refresh, editing, setEditing, logout }}
+      value={{ data, mutate, refresh, editing, setEditing, logout, showToast }}
     >
       {error && (
         <div className="sync-error" role="alert">
           {error}
           <button onClick={() => void refresh()}>Tentar novamente</button>
+        </div>
+      )}
+      {toast && (
+        <div
+          className="event-toast"
+          role="status"
+          aria-live="polite"
+          data-closing={toast.closing}
+        >
+          {toast.message}
         </div>
       )}
       {children}
