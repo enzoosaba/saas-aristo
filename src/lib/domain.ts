@@ -130,7 +130,7 @@ export type DailySummary = {
   totalCount: number;
   xp: number;
   activities: DailyActivity[];
-  sessions: { title: string; subject: string; start: string; duration: number }[];
+  sessions: { subject: string; start: string; duration: number }[];
   questions: { subject: string; topic: string; total: number; correct: number }[];
   plan: { prioridades: string; horarios: string; observacoes: string } | null;
 };

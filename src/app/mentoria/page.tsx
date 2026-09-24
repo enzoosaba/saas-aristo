@@ -333,9 +333,9 @@ function AlunosTab({ today }: { today: string }) {
                   <ul className="mentor-session-list">
                     {summary.sessions.map((s, i) => (
                       <li key={i}>
-                        <strong>{s.title}</strong>
+                        <strong>{s.subject}</strong>
                         <span>
-                          {s.subject} · {s.start} · {s.duration} min
+                          {s.start} · {s.duration} min
                         </span>
                       </li>
                     ))}

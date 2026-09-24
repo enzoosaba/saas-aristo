@@ -605,6 +605,56 @@ try {
   const state = await (
     await student.ctx.request.get(base + "/api/study")
   ).json();
+  const privateSessionTitle = "Redação sobre assunto pessoal";
+  if (!pg) {
+    assert.equal(
+      (
+        await post(student, "/api/study", {
+          action: "save-session",
+          session: {
+            id: randomUUID(),
+            title: privateSessionTitle,
+            subject: "Redação",
+            date: state.today,
+            start: "08:00",
+            duration: 60,
+            notes: "",
+            version: 0,
+          },
+        })
+      ).status(),
+      200,
+    );
+  }
+  const ownStudyState = await (
+    await student.ctx.request.get(base + "/api/study")
+  ).json();
+  const ownSession = ownStudyState.sessions.find(
+    (session) => session.date === state.today,
+  );
+  assert.ok(ownSession, "a sessão salva deve voltar para o próprio aluno");
+  const expectedSession = pg
+    ? {
+        title: "Estudo dirigido",
+        subject: "Matemática",
+        start: "08:00",
+        duration: 60,
+      }
+    : {
+        title: privateSessionTitle,
+        subject: "Redação",
+        start: "08:00",
+        duration: 60,
+      };
+  assert.equal(ownSession.title, expectedSession.title);
+  const ownSessionPage = await student.ctx.newPage();
+  await ownSessionPage.goto(base + "/planos");
+  await ownSessionPage
+    .getByRole("button", {
+      name: new RegExp(`Editar sessão ${expectedSession.title}`),
+    })
+    .waitFor();
+  await ownSessionPage.close();
   const payload = {
     action: "save-plan",
     date: state.today,
@@ -627,6 +677,26 @@ try {
     )
   ).json();
   assert.equal(summary.plan.prioridades, "Entrega");
+  assert.deepEqual(summary.sessions, [
+    {
+      subject: expectedSession.subject,
+      start: expectedSession.start,
+      duration: expectedSession.duration,
+    },
+  ]);
+  assert.equal(
+    summary.sessions.some((session) => Object.hasOwn(session, "title")),
+    false,
+    "a resposta do mentor não pode serializar a chave title",
+  );
+  assert.equal(
+    JSON.stringify(summary.sessions).includes(expectedSession.title),
+    false,
+    "a resposta do mentor não pode conter o nome privado em outro campo",
+  );
+  assert.equal(summary.doneCount, pg ? 1 : 0);
+  assert.equal(summary.totalCount, pg ? 2 : 1);
+  assert.equal(summary.xp, pg ? 20 : 0);
   const token = randomBytes(32).toString("hex");
   const expired = randomBytes(32).toString("hex");
   await admin(

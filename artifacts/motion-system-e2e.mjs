@@ -66,14 +66,14 @@ async function exercise(width) {
       "--motion-slow",
       "--ease-out",
       "--ease-in",
-    ].map((token) => root.getPropertyValue(token).trim());
+    ].map((token) => root.getPropertyValue(token).replaceAll(" ", "").trim());
   });
   assert.deepEqual(tokens, [
     ".15s",
     ".25s",
     ".4s",
-    "cubic-bezier(.16, 1, .3, 1)",
-    "cubic-bezier(.7, 0, .84, 0)",
+    "cubic-bezier(.16,1,.3,1)",
+    "cubic-bezier(.7,0,.84,0)",
   ]);
 
   const missions = page.locator(".missions-panel").first();

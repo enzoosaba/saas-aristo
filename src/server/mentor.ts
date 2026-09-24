@@ -95,7 +95,6 @@ export async function dailySummary(
   ).map((r) => {
     const s = JSON.parse(r.data);
     return {
-      title: s.title,
       subject: s.subject,
       start: s.start,
       duration: s.duration,
