@@ -65,9 +65,14 @@ export async function auditCatalog(db) {
     const policies = (await db.query("SELECT polcmd, polroles FROM pg_policy WHERE polrelid = $1", [t.oid])).rows;
     if (!policies.length) violations.push(`table ${name} has no policy at all`);
     const covered = new Set(policies.map((p) => (p.polcmd === "*" ? "all" : COMMANDS[p.polcmd])));
-    const requiredCommands = t.relname === "audit_logs" ? ["SELECT", "INSERT"] : Object.values(COMMANDS);
-    if (t.relname === "audit_logs" && policies.some(p => ["*", "w", "d"].includes(p.polcmd)))
-      violations.push(`table ${name} has a write policy that breaks append-only auditing`);
+    const immutable = {
+      audit_logs: { required: ["SELECT", "INSERT"], forbidden: ["w", "d"] },
+      badges: { required: ["SELECT"], forbidden: ["a", "w", "d"] },
+      achievement_unlocks: { required: ["SELECT"], forbidden: ["a", "w", "d"] },
+    }[t.relname];
+    const requiredCommands = immutable?.required ?? Object.values(COMMANDS);
+    if (immutable && policies.some(p => ["*", ...immutable.forbidden].includes(p.polcmd)))
+      violations.push(`table ${name} has a write policy that breaks its immutable contract`);
     if (!covered.has("all"))
       for (const command of requiredCommands) if (!covered.has(command)) violations.push(`table ${name} has no ${command} policy (decide it explicitly, even if the answer is "nobody")`);
     if (policies.some((p) => p.polroles.includes(0) || p.polroles.includes("0") || p.polroles.includes(0n)))
@@ -171,7 +176,7 @@ test("the audit fails for each way a new object could ship unprotected (delibera
       /aristo_app can UPDATE aristo\.users\.role/,
       /aristo_app can UPDATE aristo\.users\.email/,
       /aristo_app can reach aristo\.migrations/,
-      /aristo\.audit_logs has a write policy that breaks append-only auditing/,
+      /aristo\.audit_logs has a write policy that breaks its immutable contract/,
     ];
     for (const pattern of expected) assert.match(text, pattern);
     // and it did not cry wolf about the healthy objects
