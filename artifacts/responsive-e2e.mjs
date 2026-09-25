@@ -199,6 +199,16 @@ try {
   await page
     .getByRole("button", { name: "Adicionar tarefa neste dia" })
     .click();
+  const dateField = await page.getByLabel("Data", { exact: true }).boundingBox();
+  const priorityField = await page.getByLabel("Prioridade").boundingBox();
+  assert.ok(dateField && priorityField);
+  assert.ok(
+    dateField.x + dateField.width <= priorityField.x,
+    "task date and priority fields must not overlap on mobile",
+  );
+  await page.screenshot({
+    path: "test-results/responsive/quick-add-task-mobile.png",
+  });
   await page
     .getByLabel("Nome", { exact: true })
     .fill("Tarefa criada pelo calendário");
