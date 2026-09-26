@@ -3,6 +3,26 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const globalDb = globalThis as unknown as { aristoDb?: DatabaseSync };
+export const recordsValueConstraintMigration = `BEGIN IMMEDIATE;
+  CREATE TABLE records_with_value_check (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL REFERENCES items(id),
+    date TEXT NOT NULL,
+    value INTEGER NOT NULL DEFAULT 0,
+    done INTEGER NOT NULL DEFAULT 0,
+    target INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY(user_id,item_id,date),
+    CONSTRAINT records_value_within_target
+      CHECK(value >= 0 AND target > 0 AND value <= target)
+  );
+  INSERT INTO records_with_value_check(user_id,item_id,date,value,done,target,version)
+    SELECT user_id,item_id,date,value,done,target,version FROM records;
+  DROP TABLE records;
+  ALTER TABLE records_with_value_check RENAME TO records;
+  PRAGMA user_version=5;
+  COMMIT;`;
+
 export function db() {
   if (globalDb.aristoDb) return globalDb.aristoDb;
   const path = resolve(
@@ -29,13 +49,21 @@ export function db() {
     CREATE TABLE IF NOT EXISTS password_resets (token TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS password_resets_user ON password_resets(user_id);
   `);
-  const { user_version } = connection
-    .prepare("PRAGMA user_version")
-    .get() as { user_version: number };
+  const { user_version } = connection.prepare("PRAGMA user_version").get() as {
+    user_version: number;
+  };
   if (user_version < 4) {
     connection.exec(
       "ALTER TABLE users ADD COLUMN avatar TEXT; PRAGMA user_version=4;",
     );
+  }
+  if (user_version < 5) {
+    try {
+      connection.exec(recordsValueConstraintMigration);
+    } catch (error) {
+      if (connection.isTransaction) connection.exec("ROLLBACK");
+      throw error;
+    }
   }
   globalDb.aristoDb = connection;
   return connection;
