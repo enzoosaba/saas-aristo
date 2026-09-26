@@ -59,13 +59,13 @@ test("badge catalog seeds 20 stable badges and enforces slot and threshold relat
     assert.equal(rows.filter((b) => b.category === "track").length, 16);
     await assert.rejects(
       db.query(
-        `INSERT INTO aristo.badges(id,category,tier,name,threshold_type,threshold_value) VALUES('duplicate','division',1,'Duplicate','xp',0)`,
+        `INSERT INTO aristo.badges(id,category,tier,name,threshold_type,threshold_value,message) VALUES('duplicate','division',1,'Duplicate','xp',0,'Duplicate message')`,
       ),
       { code: "23505" },
     );
     await assert.rejects(
       db.query(
-        `INSERT INTO aristo.badges(id,category,tier,name,threshold_type,threshold_value) VALUES('wrong','division',2,'Wrong','focus_minutes',1)`,
+        `INSERT INTO aristo.badges(id,category,tier,name,threshold_type,threshold_value,message) VALUES('wrong','division',2,'Wrong','focus_minutes',1,'Wrong message')`,
       ),
       { code: "23514" },
     );
