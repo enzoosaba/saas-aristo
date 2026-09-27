@@ -1,6 +1,11 @@
 import { db, isPostgres, transaction } from "./db";
 
 import { HttpError } from "./http";
+import {
+  executeFocusCommand,
+  focusConflictMessage,
+  type FocusCommand,
+} from "./focus";
 
 import {
   resolveUserScope,
@@ -25,6 +30,57 @@ import {
 import { z } from "zod";
 
 type ItemRow = { id: string; data: string; version: number };
+
+type FocusMutation = Extract<
+  z.infer<typeof mutation>,
+  { action: "focus-start" | "focus-pause" | "focus-resume" | "focus-end" }
+>;
+
+function focusError(error: unknown): never {
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String(error.code)
+      : "";
+  const message = error instanceof Error ? error.message : "";
+  const friendly = focusConflictMessage(code, message);
+  if (friendly) throw new HttpError(409, friendly);
+  throw error;
+}
+
+async function mutateFocus(user: User, data: FocusMutation) {
+  if (!isPostgres())
+    throw new HttpError(503, "O relógio de foco requer o banco principal.");
+  try {
+    await executeFocusCommand(user.id, data as FocusCommand, {
+      transaction,
+      call: async (command, values) => {
+        const connection = db();
+        if (command === "start")
+          await connection
+            .prepare("SELECT aristo.focus_start_session(?,NULL)")
+            .get(...values);
+        if (command === "pause")
+          await connection
+            .prepare("SELECT aristo.focus_pause_session(?,?)")
+            .get(...values);
+        if (command === "resume")
+          await connection
+            .prepare("SELECT aristo.focus_resume_session(?,?,?)")
+            .get(...values);
+        if (command === "end")
+          await connection
+            .prepare("SELECT aristo.focus_end_session(?,?)")
+            .get(...values);
+        if (command === "sync")
+          await connection
+            .prepare("SELECT aristo.sync_track_achievements(?)")
+            .get(...values);
+      },
+    });
+  } catch (error) {
+    focusError(error);
+  }
+}
 
 export function state(user: User): Promise<StudyState> {
   // Fase 4B (performance): this used to be 8 independent statements. Under
@@ -83,6 +139,43 @@ async function stateWithinTransaction(user: User): Promise<StudyState> {
 
     .all(user.id)) as { date: string; data: string; version: number }[];
 
+  const focus = isPostgres()
+    ? (((await connection
+        .prepare(`WITH active AS (
+          SELECT id,status FROM aristo.focus_sessions
+           WHERE user_id=? AND status IN ('RUNNING','PAUSED') LIMIT 1
+        ), ordered AS (
+          SELECT e.session_id,e.type,e.occurred_at,
+                 lead(e.occurred_at,1,clock_timestamp()) OVER (
+                   PARTITION BY e.session_id ORDER BY e.occurred_at,e.id
+                 ) AS next_at
+            FROM aristo.focus_session_events e JOIN active a ON a.id=e.session_id
+        ), elapsed AS (
+          SELECT session_id,COALESCE(floor(sum(extract(epoch FROM next_at-occurred_at)))::INTEGER,0) AS seconds
+            FROM ordered WHERE type IN ('started','resumed') AND next_at>occurred_at GROUP BY session_id
+        )
+        SELECT a.id,a.status,COALESCE(elapsed.seconds,0) AS "elapsedSeconds",
+               clock_timestamp()::TEXT AS "measuredAt",
+               COALESCE((SELECT sum(credited_focus_seconds)::INTEGER
+                 FROM aristo.focus_session_daily_credit
+                WHERE user_id=? AND local_date=(clock_timestamp() AT TIME ZONE 'America/Bahia')::DATE),0)
+                 AS "creditedTodaySeconds"
+          FROM active a LEFT JOIN elapsed ON elapsed.session_id=a.id
+        UNION ALL
+        SELECT NULL,NULL,0,clock_timestamp()::TEXT,
+               COALESCE((SELECT sum(credited_focus_seconds)::INTEGER
+                 FROM aristo.focus_session_daily_credit
+                WHERE user_id=? AND local_date=(clock_timestamp() AT TIME ZONE 'America/Bahia')::DATE),0)
+         WHERE NOT EXISTS (SELECT 1 FROM active)`)
+        .get(user.id, user.id, user.id)) ?? {}) as {
+        id?: string;
+        status?: "RUNNING" | "PAUSED";
+        elapsedSeconds?: number;
+        measuredAt?: string;
+        creditedTodaySeconds?: number;
+      })
+    : {};
+
   return {
     user,
     // Fase 4A: surfaces admin-panel access to the nav — reuses
@@ -134,6 +227,19 @@ async function stateWithinTransaction(user: User): Promise<StudyState> {
 
     records: records.map((r) => ({ ...r, done: !!r.done })),
 
+    focus: {
+      active:
+        focus.id && focus.status && focus.measuredAt
+          ? {
+              id: focus.id,
+              status: focus.status,
+              elapsedSeconds: Number(focus.elapsedSeconds || 0),
+              measuredAt: focus.measuredAt,
+            }
+          : null,
+      creditedTodaySeconds: Number(focus.creditedTodaySeconds || 0),
+    },
+
     plans: plans.map((p) => ({
       ...JSON.parse(p.data),
 
@@ -147,6 +253,8 @@ async function stateWithinTransaction(user: User): Promise<StudyState> {
 }
 
 export function mutate(user: User, data: z.infer<typeof mutation>) {
+  if (data.action.startsWith("focus-"))
+    return mutateFocus(user, data as FocusMutation);
   return transaction(async () => {
     const connection = db();
     // Serialize each user's mutations across PostgreSQL connections/instances.

@@ -218,6 +218,20 @@ body { background:var(--background); }
 .mission-xp { display:grid; grid-template-columns:1fr auto; gap:12px; margin:21px 0 7px; font-size:12px; color:#baafbe; }
 .mission-xp>div { grid-column:1/-1; }.mission-xp strong { color:#ffbc79; }
 .mission-row { display:flex; gap:13px; align-items:center; padding:18px 0; border-bottom:1px solid #343039; }
+.focus-timer { margin:4px 0 16px; padding:14px; border:1px solid var(--border-default); border-radius:16px; background:var(--surface-warm); }
+.focus-timer-heading { display:flex; align-items:center; gap:10px; }
+.focus-timer-heading>div { min-width:0; flex:1; }
+.focus-timer-heading h3,.focus-timer-heading p { margin:0; }
+.focus-timer-heading h3 { font-size:14px; }
+.focus-timer-heading p { margin-top:2px; color:var(--text-secondary); font-size:11px; }
+.focus-timer-heading>strong { font-variant-numeric:tabular-nums; font-size:17px; letter-spacing:.02em; }
+.focus-timer-icon { display:grid; place-items:center; width:36px; height:36px; flex:0 0 36px; border-radius:50%; color:var(--accent-text); background:var(--surface-card); }
+.focus-timer-actions { display:flex; gap:8px; margin-top:12px; }
+.focus-timer-actions button { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:40px; padding:8px 13px; border-radius:11px; background:var(--brand-gradient); color:#0d0101; font-size:12px; font-weight:700; }
+.focus-timer-actions .focus-end-button { background:var(--surface-card); color:var(--foreground); border:1px solid var(--border-default); }
+.focus-resume-reason { display:grid; gap:6px; margin-top:12px; color:var(--text-secondary); font-size:11px; }
+.focus-resume-reason input { min-width:0; width:100%; min-height:42px; padding:9px 11px; border:1px solid var(--border-default); border-radius:11px; background:var(--surface-card); color:var(--foreground); font-size:16px; }
+.focus-timer-error { margin:10px 0 0; color:var(--danger,#d95757); font-size:12px; }
 .mission-icon { display:grid; place-items:center; width:42px; height:42px; flex-shrink:0; border:1px solid #ff861533; border-radius:50%; background:#ff86150b; }
 .mission-row>div { flex:1; min-width:0; }.mission-line { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px; font-size:12px; }.mission-line strong { font-weight:550; }.mission-line>span { color:#b7a9ba; }
 .panel-link { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:18px; font-size:12px; color:#ffb978; }

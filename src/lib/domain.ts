@@ -86,6 +86,15 @@ export type StudySession = {
   notes: string;
   version: number;
 };
+export type FocusTimerState = {
+  active: {
+    id: string;
+    status: "RUNNING" | "PAUSED";
+    elapsedSeconds: number;
+    measuredAt: string;
+  } | null;
+  creditedTodaySeconds: number;
+};
 export type StudyState = {
   sessions: StudySession[];
   demo: boolean;
@@ -99,6 +108,8 @@ export type StudyState = {
   items: StudyItem[];
 
   records: StudyRecord[];
+
+  focus: FocusTimerState;
 
   plans: Plan[];
 

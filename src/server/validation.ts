@@ -97,6 +97,27 @@ export const sessionSchema = z
   );
 export const mutation = z.discriminatedUnion("action", [
   z
+    .object({
+      action: z.literal("focus-start"),
+      commandId: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.enum(["focus-pause", "focus-end"]),
+      commandId: z.string().uuid(),
+      sessionId: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("focus-resume"),
+      commandId: z.string().uuid(),
+      sessionId: z.string().uuid(),
+      reason: z.string().trim().min(1).max(300),
+    })
+    .strict(),
+  z
     .object({ action: z.literal("save-session"), session: sessionSchema })
     .strict(),
   z
