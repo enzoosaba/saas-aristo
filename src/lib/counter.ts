@@ -15,9 +15,9 @@ function nearestNiceStep(value: number) {
   );
 }
 
-export function clampCount(value: number, target: number) {
+export function clampCount(value: number) {
   if (!Number.isFinite(value)) return 0;
-  return Math.min(target, Math.max(0, Math.round(value)));
+  return Math.max(0, Math.round(value));
 }
 
 export function countQuickSteps(target: number) {

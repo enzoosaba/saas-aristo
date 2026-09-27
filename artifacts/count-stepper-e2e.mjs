@@ -70,7 +70,7 @@ async function exercise(width) {
         version: 0,
       },
     });
-  for (const invalid of [-1, 1.5, "20", 21])
+  for (const invalid of [-1, 1.5, "20"])
     assert.equal((await directRecord(invalid)).status(), 400);
   assert.equal((await state()).records.length, 0);
 
@@ -92,7 +92,7 @@ async function exercise(width) {
   await reading.getByRole("button", { name: /Editar valor/ }).click();
   await reading.getByLabel("Valor atual de Leitura smoke").fill("999");
   await reading.getByRole("button", { name: "Salvar", exact: true }).click();
-  await reading.getByText("20 / 20 páginas", { exact: true }).waitFor();
+  await reading.getByText("999 / 20 páginas", { exact: true }).waitFor();
   await page
     .getByText("Leitura smoke concluído. Muito bem!", { exact: true })
     .waitFor();
@@ -114,7 +114,7 @@ async function exercise(width) {
   await study.getByRole("button", { name: "Salvar", exact: true }).click();
   await study.getByText("180 / 200 minutos", { exact: true }).waitFor();
   await study.getByRole("button", { name: "+60", exact: true }).click();
-  await study.getByText("200 / 200 minutos", { exact: true }).waitFor();
+  await study.getByText("240 / 200 minutos", { exact: true }).waitFor();
   await page
     .getByText("Estudo smoke concluído. Muito bem!", { exact: true })
     .waitFor();
@@ -126,7 +126,7 @@ async function exercise(width) {
   await page.reload();
   await page.locator(".app-shell").waitFor();
   await page.getByText("0 / 20 páginas", { exact: true }).waitFor();
-  await page.getByText("200 / 200 minutos", { exact: true }).waitFor();
+  await page.getByText("240 / 200 minutos", { exact: true }).waitFor();
   const records = (await state()).records;
   assert.equal(records.filter((record) => record.done).length, 1);
   await context.close();
@@ -141,7 +141,7 @@ try {
       direct: true,
       quickSteps: true,
       fineStep: true,
-      clamp: true,
+      overTarget: true,
       persistence: true,
       evidence: output,
     }),

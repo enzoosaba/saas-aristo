@@ -8,9 +8,9 @@ test("quick increments scale with each habit target", () => {
   assert.notDeepEqual(countQuickSteps(20), countQuickSteps(200));
 });
 
-test("count values are integral and clamped to the habit target", () => {
-  assert.equal(clampCount(-8, 20), 0);
-  assert.equal(clampCount(12.6, 20), 13);
-  assert.equal(clampCount(180, 200), 180);
-  assert.equal(clampCount(250, 200), 200);
+test("count values are integral, nonnegative, and may exceed the target", () => {
+  assert.equal(clampCount(-8), 0);
+  assert.equal(clampCount(12.6), 13);
+  assert.equal(clampCount(180), 180);
+  assert.equal(clampCount(250), 250);
 });

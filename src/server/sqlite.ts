@@ -23,6 +23,26 @@ export const recordsValueConstraintMigration = `BEGIN IMMEDIATE;
   PRAGMA user_version=5;
   COMMIT;`;
 
+export const recordsValueNoUpperBoundMigration = `BEGIN IMMEDIATE;
+  CREATE TABLE records_without_upper_bound (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL REFERENCES items(id),
+    date TEXT NOT NULL,
+    value INTEGER NOT NULL DEFAULT 0,
+    done INTEGER NOT NULL DEFAULT 0,
+    target INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY(user_id,item_id,date),
+    CONSTRAINT records_value_nonnegative
+      CHECK(value >= 0 AND target > 0)
+  );
+  INSERT INTO records_without_upper_bound(user_id,item_id,date,value,done,target,version)
+    SELECT user_id,item_id,date,value,done,target,version FROM records;
+  DROP TABLE records;
+  ALTER TABLE records_without_upper_bound RENAME TO records;
+  PRAGMA user_version=6;
+  COMMIT;`;
+
 export function db() {
   if (globalDb.aristoDb) return globalDb.aristoDb;
   const path = resolve(
@@ -60,6 +80,14 @@ export function db() {
   if (user_version < 5) {
     try {
       connection.exec(recordsValueConstraintMigration);
+    } catch (error) {
+      if (connection.isTransaction) connection.exec("ROLLBACK");
+      throw error;
+    }
+  }
+  if (user_version < 6) {
+    try {
+      connection.exec(recordsValueNoUpperBoundMigration);
     } catch (error) {
       if (connection.isTransaction) connection.exec("ROLLBACK");
       throw error;

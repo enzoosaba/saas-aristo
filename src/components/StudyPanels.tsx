@@ -36,7 +36,7 @@ export function MissionsPanel() {
         return (
           sum +
           (item.measure === "count"
-            ? Math.min(r?.value || 0, item.target)
+            ? r?.value || 0
             : Number(r?.done || false))
         );
       }, 0);

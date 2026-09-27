@@ -444,9 +444,6 @@ export function mutate(user: User, data: z.infer<typeof mutation>) {
 
           .run(user.id, item.id);
 
-      if (data.value > item.target)
-        throw new HttpError(400, "O progresso não pode ultrapassar a meta.");
-
       const done =
         item.measure === "count" ? data.value >= item.target : data.done;
 

@@ -74,7 +74,7 @@ export default function PersonalItems({
       setError("Informe um valor numérico válido.");
       return;
     }
-    const value = clampCount(parsed, item.target);
+    const value = clampCount(parsed);
     if (await update(item, value, false)) setEditingValue(null);
   }
   async function archive(item: StudyItem) {
@@ -179,7 +179,6 @@ export default function PersonalItems({
                             type="number"
                             inputMode="numeric"
                             min={0}
-                            max={item.target}
                             step={1}
                             value={editingValue.draft}
                             disabled={!!busy || blocked}
@@ -230,7 +229,7 @@ export default function PersonalItems({
                         <button
                           className="counter-step"
                           aria-label={`Aumentar ${item.title}`}
-                          disabled={!!busy || blocked || value >= item.target}
+                          disabled={!!busy || blocked}
                           onClick={() => void update(item, value + 1, false)}
                         >
                           <Plus size={18} />
@@ -245,11 +244,11 @@ export default function PersonalItems({
                         <button
                           key={step}
                           type="button"
-                          disabled={!!busy || blocked || value >= item.target}
+                          disabled={!!busy || blocked}
                           onClick={() =>
                             void update(
                               item,
-                              clampCount(value + step, item.target),
+                              clampCount(value + step),
                               false,
                             )
                           }
