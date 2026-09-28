@@ -19,6 +19,10 @@ export function sessionEnd(session: StudySession) {
   const n = (minutesOf(session.start) + session.duration) % 1440;
   return `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 }
+function writableSession(session: StudySession) {
+  const { id, title, subject, date, start, duration, notes, version } = session;
+  return { id, title, subject, date, start, duration, notes, version };
+}
 export default function WeeklyPlanner() {
   const { data, mutate } = useStudy();
   const [week, setWeek] = useState(monday(data.today));
@@ -67,7 +71,7 @@ export default function WeeklyPlanner() {
       await mutate({
         action: "save-session",
         session: {
-          ...draft,
+          ...writableSession(draft),
           title: f.get("title"),
           subject: f.get("subject"),
           date: f.get("date"),
@@ -110,7 +114,10 @@ export default function WeeklyPlanner() {
     setBusy(true);
     setError("");
     try {
-      await mutate({ action: "save-session", session: { ...session, date } });
+      await mutate({
+        action: "save-session",
+        session: { ...writableSession(session), date },
+      });
       setStatus("Sessão movida para o dia escolhido.");
     } catch (e) {
       setError(

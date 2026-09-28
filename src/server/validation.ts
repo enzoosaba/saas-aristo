@@ -100,11 +100,12 @@ export const mutation = z.discriminatedUnion("action", [
     .object({
       action: z.literal("focus-start"),
       commandId: z.string().uuid(),
+      studySessionId: z.string().uuid().optional(),
     })
     .strict(),
   z
     .object({
-      action: z.enum(["focus-pause", "focus-end"]),
+      action: z.enum(["focus-pause", "focus-end", "focus-abandon"]),
       commandId: z.string().uuid(),
       sessionId: z.string().uuid(),
     })

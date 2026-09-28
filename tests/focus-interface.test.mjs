@@ -56,17 +56,19 @@ test("P0001 and P0002 conflicts become stable friendly messages", () => {
   assert.equal(focusConflictMessage("42501"), null);
 });
 
-test("all four focus commands call their matching database function", async () => {
+test("all five focus commands call their matching database function and start carries the planned session", async () => {
   const calls = [];
   const dependencies = {
     transaction: async (work) => work(),
     call: async (sql, values) => calls.push({ sql, values }),
   };
-  await executeFocusCommand("student", { action: "focus-start", commandId: "c1" }, dependencies);
+  await executeFocusCommand("student", { action: "focus-start", commandId: "c1", studySessionId: "planned" }, dependencies);
   await executeFocusCommand("student", { action: "focus-pause", commandId: "c2", sessionId: "s" }, dependencies);
   await executeFocusCommand("student", { action: "focus-resume", commandId: "c3", sessionId: "s", reason: "Água" }, dependencies);
   await executeFocusCommand("student", { action: "focus-end", commandId: "c4", sessionId: "s" }, dependencies);
-  assert.deepEqual(calls.map((call) => call.sql), ["start", "pause", "resume", "end", "sync"]);
+  await executeFocusCommand("student", { action: "focus-abandon", commandId: "c5", sessionId: "s2" }, dependencies);
+  assert.deepEqual(calls.map((call) => call.sql), ["start", "pause", "resume", "end", "sync", "abandon"]);
+  assert.deepEqual(calls[0].values, ["c1", "planned"]);
 });
 
 test("achievement sync starts only after the end transaction committed", async () => {

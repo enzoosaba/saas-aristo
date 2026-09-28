@@ -7,14 +7,15 @@ const browser=await chromium.launch({headless:true,...(process.platform==='win32
 const ctx=await browser.newContext({viewport:{width:1440,height:960},reducedMotion:'reduce'});const page=await ctx.newPage();
 const post=data=>ctx.request.post(base+'/api/study',{headers:{Origin:base},data});
 const state=async()=> (await ctx.request.get(base+'/api/study')).json();
+const writable=session=>{const {id,title,subject,date,start,duration,notes,version}=session;return {id,title,subject,date,start,duration,notes,version};};
 try {
  await ctx.request.post(base+'/api/auth',{headers:{Origin:base},data:{action:'register',name:'Aluno Semanal',email:`week-${Date.now()}@example.test`,password:'Teste-Seguro-2026!'}});
  await page.goto(base+'/planos');await page.getByRole('button',{name:'Nova sessão',exact:true}).click();
  await page.getByLabel('Nome da sessão',{exact:true}).fill('Revisão de funções');await page.getByLabel('Início da sessão').fill('09:00');await page.getByLabel('Duração em minutos').fill('60');await page.getByRole('button',{name:'Salvar sessão',exact:true}).click();
  await page.getByText('Sessão salva no planejamento semanal.',{exact:true}).waitFor();let s=await state();let session=s.sessions[0];assert.equal(session.title,'Revisão de funções');await page.reload();await page.getByRole('button',{name:/Editar sessão Revisão de funções/}).waitFor();
- assert.equal((await post({action:'save-session',session:{...session,id:crypto.randomUUID(),version:0,start:'09:30'}})).status(),409);
- assert.equal((await post({action:'save-session',session:{...session,version:0}})).status(),409);
- assert.equal((await post({action:'save-session',session:{...session,start:'23:30',duration:60}})).status(),400);
+ assert.equal((await post({action:'save-session',session:{...writable(session),id:crypto.randomUUID(),version:0,start:'09:30'}})).status(),409);
+ assert.equal((await post({action:'save-session',session:{...writable(session),version:0}})).status(),409);
+ assert.equal((await post({action:'save-session',session:{...writable(session),start:'23:30',duration:60}})).status(),400);
  const other=await browser.newContext();await other.request.post(base+'/api/auth',{headers:{Origin:base},data:{action:'register',name:'Outro Aluno',email:`other-week-${Date.now()}@example.test`,password:'Teste-Seguro-2026!'}});assert.equal((await other.request.post(base+'/api/study',{headers:{Origin:base},data:{action:'delete-session',id:session.id,version:session.version}})).status(),404);await other.close();
  await page.getByRole('button',{name:/Editar sessão Revisão de funções/}).click();await page.getByLabel('Duração em minutos').fill('90');await page.getByRole('button',{name:'Salvar sessão',exact:true}).click();await page.getByText('Sessão salva no planejamento semanal.',{exact:true}).waitFor();session=(await state()).sessions[0];assert.equal(session.duration,90);
  const target=page.locator('.week-day').filter({has:page.locator('header')}).last();const date=await target.getAttribute('aria-label');const dropDate=date.slice(-10);if(dropDate!==session.date){await page.getByRole('button',{name:/Editar sessão Revisão de funções/}).dragTo(target);await page.getByText('Sessão movida para o dia escolhido.').waitFor();assert.equal((await state()).sessions[0].date,dropDate);}
