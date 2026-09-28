@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { createHash, randomUUID } from "node:crypto";
 import { db } from "./db";
+import { allowedRequestOrigins } from "./origin";
 export class HttpError extends Error {
   constructor(
     public status: number,
@@ -16,18 +17,16 @@ export function json(data: unknown, status = 200) {
     headers: { "Cache-Control": "no-store" },
   });
 }
+
 export async function body(request: Request) {
   const origin = request.headers.get("origin");
-  const expectedHost = process.env.APP_ORIGIN
-    ? new URL(process.env.APP_ORIGIN).origin
-    : new URL(request.url).origin;
   let originHost: string | null = null;
   try {
     originHost = origin ? new URL(origin).origin : null;
   } catch {
     originHost = null;
   }
-  if (!originHost || originHost !== expectedHost)
+  if (!originHost || !allowedRequestOrigins(request.url).has(originHost))
     throw new HttpError(403, "Origem não autorizada.");
   if (!request.headers.get("content-type")?.includes("application/json"))
     throw new HttpError(415, "Envie dados em JSON.");
