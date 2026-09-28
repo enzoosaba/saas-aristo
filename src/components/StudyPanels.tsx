@@ -13,7 +13,6 @@ import Card from "./ui/Card";
 import ProgressBar from "./ui/ProgressBar";
 import { useStudy } from "./StudyProvider";
 import { progress, dayOffset, isScheduled } from "@/lib/domain";
-import FocusTimer from "./FocusTimer";
 export function MissionsPanel() {
   const { data } = useStudy();
   const [week, setWeek] = useState(false);
@@ -77,7 +76,6 @@ export function MissionsPanel() {
           </button>
         </div>
       </div>
-      {!week && <FocusTimer />}
       <div
         key={`mobile-${week ? "week" : "today"}`}
         className="mobile-mission-content motion-tab-panel"

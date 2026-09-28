@@ -9,6 +9,7 @@ import { useStudy } from "@/components/StudyProvider";
 import { daysLabel, progress } from "@/lib/domain";
 import { resizeImageToDataUrl } from "@/lib/image";
 import { Camera, Trash2, Flame } from "lucide-react";
+import ThemeToggle from "@/components/ThemeToggle";
 export default function PerfilPage() {
   const { data, mutate, logout } = useStudy();
   const stats = progress(data.items, data.records, data.today);
@@ -159,6 +160,18 @@ export default function PerfilPage() {
             {busy ? "Aguarde…" : "Salvar perfil"}
           </button>
         </form>
+      </Card>
+      <Card>
+        <div className="panel-title">
+          <h2>Aparência</h2>
+        </div>
+        <p className="panel-description">
+          Escolha o tema usado na sua conta.
+        </p>
+        <div className="profile-theme-setting">
+          <span>Tema claro ou escuro</span>
+          <ThemeToggle />
+        </div>
       </Card>
       <div className="real-metrics">
         <Card>

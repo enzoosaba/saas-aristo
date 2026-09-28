@@ -11,7 +11,11 @@ import { useStudy } from "./StudyProvider";
 
 type FocusAction = "start" | "pause" | "resume" | "end";
 
-export default function FocusTimer() {
+export default function FocusTimer({
+  placement = "card",
+}: {
+  placement?: "card" | "header";
+}) {
   const { data, mutate, showToast } = useStudy();
   const { focus } = data;
   const [now, setNow] = useState(() =>
@@ -79,8 +83,11 @@ export default function FocusTimer() {
     }
   }
 
-  return (
-    <section className="focus-timer" aria-labelledby="focus-timer-title">
+  const timer = (
+    <section
+      className={`focus-timer${placement === "header" ? " focus-timer--header-panel" : ""}`}
+      aria-labelledby="focus-timer-title"
+    >
       <div className="focus-timer-heading">
         <span className="focus-timer-icon" aria-hidden="true">
           <Timer size={20} />
@@ -150,4 +157,21 @@ export default function FocusTimer() {
       </div>
     </section>
   );
+
+  if (placement === "header") {
+    return (
+      <details className="header-focus-timer">
+        <summary
+          aria-label={`Abrir relógio de foco, ${formatFocusTime(todaySeconds)} hoje`}
+          title="Tempo de Foco"
+        >
+          <Timer size={20} aria-hidden="true" />
+          <span>{formatFocusTime(todaySeconds)}</span>
+        </summary>
+        <div className="header-focus-timer-popover">{timer}</div>
+      </details>
+    );
+  }
+
+  return timer;
 }

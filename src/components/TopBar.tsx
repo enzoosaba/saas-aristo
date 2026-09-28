@@ -3,10 +3,10 @@ import { Flame } from "lucide-react";
 import { daysLabel, progress } from "@/lib/domain";
 import Link from "next/link";
 import Image from "next/image";
-import ThemeToggle from "@/components/ThemeToggle";
 import QuickAdd from "@/components/QuickAdd";
 import Avatar from "@/components/ui/Avatar";
 import MobileMoreMenu from "@/components/MobileMoreMenu";
+import FocusTimer from "@/components/FocusTimer";
 
 import { useStudy } from "./StudyProvider";
 export default function TopBar() {
@@ -52,7 +52,7 @@ export default function TopBar() {
               <small>Meu perfil</small>
             </span>
           </Link>
-          <ThemeToggle />
+          <FocusTimer placement="header" />
           <QuickAdd />
         </div>
       </div>

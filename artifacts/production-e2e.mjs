@@ -258,7 +258,7 @@ try {
   }
   checks.push("six routes across eight responsive widths");
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(base);
+  await page.goto(base + "/perfil");
   await page.getByRole("button", { name: "Ativar tema claro" }).click();
   await page.reload();
   await page.locator(".app-shell").waitFor();
