@@ -1,4 +1,6 @@
--- REVIEW DRAFT ONLY. Not applied and not committed.
+-- Applied to production and committed (7e5ac3f). See the retroactive review
+-- in the Fase 5A/focus-timer conversation thread for the schema/RLS audit
+-- that covered this migration together with the other 7 from the same batch.
 
 ALTER TABLE aristo.focus_session_events
   DROP CONSTRAINT focus_session_events_type_check,
