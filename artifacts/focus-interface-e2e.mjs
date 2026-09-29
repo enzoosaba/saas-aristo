@@ -68,6 +68,18 @@ async function exerciseTimer() {
   await page.goto(base);
   await page.locator(".header-focus-timer > summary").click();
   const timer = page.locator(".header-focus-timer-popover");
+  await timer.waitFor();
+  // Regression check: the popover used to anchor to its own toggle button
+  // (which sits left of the quick-add button, not at the screen edge), so on
+  // a narrow phone its fixed width pushed the left edge off-screen — the
+  // exact bug .more-menu-panel already solved for the same header row (see
+  // mobile-nav.css). It must stay fully inside the viewport at 390px.
+  const box = await timer.boundingBox();
+  assert.ok(box.x >= 0, `popover começa fora da tela à esquerda (x=${box.x})`);
+  assert.ok(
+    box.x + box.width <= 390,
+    `popover ultrapassa a borda direita da tela (x=${box.x}, width=${box.width})`,
+  );
   await timer.getByLabel(/Sessão planejada de hoje/).selectOption(completedPlanId);
 
   await timer.getByRole("button", { name: "Iniciar", exact: true }).click();

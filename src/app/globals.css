@@ -241,12 +241,16 @@ body { background:var(--background); }
 .focus-resume-reason { display:grid; gap:6px; margin-top:12px; color:var(--text-secondary); font-size:11px; }
 .focus-resume-reason input { min-width:0; width:100%; min-height:42px; padding:9px 11px; border:1px solid var(--border-default); border-radius:11px; background:var(--surface-card); color:var(--foreground); font-size:16px; }
 .focus-timer-error { margin:10px 0 0; color:var(--danger,#d95757); font-size:12px; }
-.header-focus-timer { position:relative; flex-shrink:0; }
+.header-focus-timer { flex-shrink:0; }
 .header-focus-timer>summary { display:flex; align-items:center; justify-content:center; gap:7px; min-width:44px; height:44px; padding:0 11px; border:1px solid var(--border-default); border-radius:14px; background:var(--surface-raised); color:var(--foreground); cursor:pointer; list-style:none; font-size:12px; font-variant-numeric:tabular-nums; }
 .header-focus-timer>summary[data-active="true"] { color:var(--brand-orange); border-color:color-mix(in srgb,var(--brand-orange) 55%,var(--border-default)); }
 .header-focus-timer>summary[data-active="true"] svg { animation:focus-running-pulse var(--motion-slow) var(--ease-out) infinite alternate; }
 .header-focus-timer>summary::-webkit-details-marker { display:none; }
-.header-focus-timer-popover { position:absolute; z-index:70; top:calc(100% + 10px); right:0; width:min(340px,calc(100vw - 32px)); }
+/* Fixed to the screen edge, not to the toggle button: the button sits left of
+   quick-add (see .more-menu-panel in mobile-nav.css for the same reasoning) —
+   anchoring to the button itself pushed a 340px panel off the left edge on
+   narrow phones. */
+.header-focus-timer-popover { position:fixed; z-index:70; top:calc(var(--header-height) + 4px); right:16px; width:min(340px,calc(100vw - 32px)); }
 .header-focus-timer-popover .focus-timer { margin:0; box-shadow:0 16px 48px #0006; }
 .profile-theme-setting { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:16px; }
 @keyframes focus-running-pulse { from { opacity:.65; transform:scale(.94); } to { opacity:1; transform:scale(1); } }
