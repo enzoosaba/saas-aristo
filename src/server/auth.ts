@@ -1,12 +1,41 @@
 import { cookies } from "next/headers";
 import { randomBytes, scrypt, timingSafeEqual, createHash } from "node:crypto";
 import { promisify } from "node:util";
+import { Pool } from "pg";
 import { db, isPostgres, withActor } from "./db";
 import { HttpError } from "./http";
+import { postgresConfig } from "./postgres-config.mjs";
 import type { User } from "@/lib/domain";
 const derive = promisify(scrypt);
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+
+// DEV-ONLY escape hatch: set DEV_BYPASS_LOGIN_EMAIL in .env.local (gitignored,
+// never committed) to skip the login screen entirely on `pnpm dev` and land
+// signed in as that account. Double-gated so it can never fire on a real
+// deployment: NODE_ENV is only "development" under `next dev` — `next build`
+// always sets "production", including for Vercel previews — and VERCEL is
+// always set on Vercel regardless of environment. Looks the account up via
+// the owning Postgres role (DATABASE_URL, bypasses RLS) rather than aristo_app,
+// same reasoning as resolve_session_user() below: there is no actor yet to
+// authorize a self-only read through.
+let devBypassPool: Pool | null = null;
+async function devBypassUser(): Promise<User | null> {
+  const email = process.env.DEV_BYPASS_LOGIN_EMAIL;
+  if (
+    !email ||
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL ||
+    !isPostgres()
+  )
+    return null;
+  devBypassPool ??= new Pool(postgresConfig());
+  const result = await devBypassPool.query(
+    "SELECT id, name, email, role, avatar FROM aristo.users WHERE email = $1",
+    [email],
+  );
+  return (result.rows[0] as User) ?? null;
+}
 export async function passwordHash(password: string) {
   const salt = randomBytes(16).toString("hex");
   const key = (await derive(password, salt, 64)) as Buffer;
@@ -21,6 +50,8 @@ export async function passwordMatches(password: string, stored: string) {
   );
 }
 export async function currentUser(): Promise<User | null> {
+  const bypass = await devBypassUser();
+  if (bypass) return bypass;
   const token = (await cookies()).get("aristo-session")?.value;
   if (!token) return null;
   // Fase 3B part 5, batch 5: this lookup itself necessarily runs with no
