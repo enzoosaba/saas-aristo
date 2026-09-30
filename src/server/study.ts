@@ -33,7 +33,7 @@ type ItemRow = { id: string; data: string; version: number };
 
 type FocusMutation = Extract<
   z.infer<typeof mutation>,
-  { action: "focus-start" | "focus-pause" | "focus-resume" | "focus-end" }
+  { action: "focus-start" | "focus-pause" | "focus-resume" | "focus-end" | "focus-abandon" }
 >;
 
 function focusError(error: unknown): never {
@@ -57,7 +57,7 @@ async function mutateFocus(user: User, data: FocusMutation) {
         const connection = db();
         if (command === "start")
           await connection
-            .prepare("SELECT aristo.focus_start_session(?,NULL)")
+            .prepare("SELECT aristo.focus_start_session(?,NULLIF(?,''))")
             .get(...values);
         if (command === "pause")
           await connection
@@ -70,6 +70,10 @@ async function mutateFocus(user: User, data: FocusMutation) {
         if (command === "end")
           await connection
             .prepare("SELECT aristo.focus_end_session(?,?)")
+            .get(...values);
+        if (command === "abandon")
+          await connection
+            .prepare("SELECT aristo.focus_abandon_session(?,?)")
             .get(...values);
         if (command === "sync")
           await connection
@@ -142,7 +146,7 @@ async function stateWithinTransaction(user: User): Promise<StudyState> {
   const focus = isPostgres()
     ? (((await connection
         .prepare(`WITH active AS (
-          SELECT id,status FROM aristo.focus_sessions
+          SELECT id,status,study_session_id FROM aristo.focus_sessions
            WHERE user_id=? AND status IN ('RUNNING','PAUSED') LIMIT 1
         ), ordered AS (
           SELECT e.session_id,e.type,e.occurred_at,
@@ -154,7 +158,7 @@ async function stateWithinTransaction(user: User): Promise<StudyState> {
           SELECT session_id,COALESCE(floor(sum(extract(epoch FROM next_at-occurred_at)))::INTEGER,0) AS seconds
             FROM ordered WHERE type IN ('started','resumed') AND next_at>occurred_at GROUP BY session_id
         )
-        SELECT a.id,a.status,COALESCE(elapsed.seconds,0) AS "elapsedSeconds",
+        SELECT a.id,a.status,a.study_session_id AS "studySessionId",COALESCE(elapsed.seconds,0) AS "elapsedSeconds",
                clock_timestamp()::TEXT AS "measuredAt",
                COALESCE((SELECT sum(credited_focus_seconds)::INTEGER
                  FROM aristo.focus_session_daily_credit
@@ -162,7 +166,7 @@ async function stateWithinTransaction(user: User): Promise<StudyState> {
                  AS "creditedTodaySeconds"
           FROM active a LEFT JOIN elapsed ON elapsed.session_id=a.id
         UNION ALL
-        SELECT NULL,NULL,0,clock_timestamp()::TEXT,
+        SELECT NULL,NULL,NULL,0,clock_timestamp()::TEXT,
                COALESCE((SELECT sum(credited_focus_seconds)::INTEGER
                  FROM aristo.focus_session_daily_credit
                 WHERE user_id=? AND local_date=(clock_timestamp() AT TIME ZONE 'America/Bahia')::DATE),0)
@@ -170,24 +174,63 @@ async function stateWithinTransaction(user: User): Promise<StudyState> {
         .get(user.id, user.id, user.id)) ?? {}) as {
         id?: string;
         status?: "RUNNING" | "PAUSED";
+        studySessionId?: string;
         elapsedSeconds?: number;
         measuredAt?: string;
         creditedTodaySeconds?: number;
       })
     : {};
 
+  const sessions = isPostgres()
+    ? ((await connection
+        .prepare(
+          `SELECT id,data,version,status,
+                  actual_start_at AS "actualStartAt",
+                  actual_end_at AS "actualEndAt",
+                  net_focus_minutes AS "netFocusMinutes"
+             FROM study_sessions WHERE user_id=?
+            ORDER BY json_extract(data,'$.date'),json_extract(data,'$.start')`,
+        )
+        .all(user.id)) as (ItemRow & {
+          status: "planned" | "in_progress" | "completed" | "abandoned";
+          actualStartAt: string | null;
+          actualEndAt: string | null;
+          netFocusMinutes: number | null;
+        })[])
+    : ((await connection
+        .prepare(
+          "SELECT id,data,version FROM study_sessions WHERE user_id=? ORDER BY json_extract(data,'$.date'),json_extract(data,'$.start')",
+        )
+        .all(user.id)) as ItemRow[]);
+
   return {
     user,
     // Fase 4A: surfaces admin-panel access to the nav — reuses
     // authorization.ts's isPlatformAdmin() (Fase 3A), not a new check.
     platformAdmin: await isPlatformAdmin(user.id),
-    sessions: (
-      (await connection
-        .prepare(
-          "SELECT id,data,version FROM study_sessions WHERE user_id=? ORDER BY json_extract(data,'$.date'),json_extract(data,'$.start')",
-        )
-        .all(user.id)) as ItemRow[]
-    ).map((r) => ({ ...JSON.parse(r.data), id: r.id, version: r.version })),
+    sessions: sessions.map((r) => {
+      const execution = "status" in r
+        ? (r as ItemRow & {
+            status: "planned" | "in_progress" | "completed" | "abandoned";
+            actualStartAt: string | null;
+            actualEndAt: string | null;
+            netFocusMinutes: number | null;
+          })
+        : null;
+      return {
+        ...JSON.parse(r.data),
+        id: r.id,
+        version: r.version,
+        ...(execution
+          ? {
+              status: execution.status,
+              actualStartAt: execution.actualStartAt,
+              actualEndAt: execution.actualEndAt,
+              netFocusMinutes: execution.netFocusMinutes,
+            }
+          : {}),
+      };
+    }),
     demo: !!(await connection
       .prepare("SELECT user_id FROM demo_batches WHERE user_id=?")
       .get(user.id)),
@@ -233,6 +276,7 @@ async function stateWithinTransaction(user: User): Promise<StudyState> {
           ? {
               id: focus.id,
               status: focus.status,
+              studySessionId: focus.studySessionId || undefined,
               elapsedSeconds: Number(focus.elapsedSeconds || 0),
               measuredAt: focus.measuredAt,
             }

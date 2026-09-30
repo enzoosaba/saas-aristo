@@ -50,6 +50,7 @@ try {
     "artifacts/missions-toggle-e2e.mjs",
     "artifacts/motion-system-e2e.mjs",
     "artifacts/count-stepper-e2e.mjs",
+    "artifacts/focus-interface-e2e.mjs",
   ]) {
     const child = spawn(process.execPath, [script], {
       stdio: "inherit",

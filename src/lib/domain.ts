@@ -85,11 +85,16 @@ export type StudySession = {
   duration: number;
   notes: string;
   version: number;
+  status?: "planned" | "in_progress" | "completed" | "abandoned";
+  actualStartAt?: string | null;
+  actualEndAt?: string | null;
+  netFocusMinutes?: number | null;
 };
 export type FocusTimerState = {
   active: {
     id: string;
     status: "RUNNING" | "PAUSED";
+    studySessionId?: string;
     elapsedSeconds: number;
     measuredAt: string;
   } | null;

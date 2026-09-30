@@ -2,7 +2,6 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Eye, EyeOff } from "lucide-react";
-import ThemeToggle from "../ThemeToggle";
 import PasswordRecovery from "./PasswordRecovery";
 export default function AuthForm({
   onSuccess,
@@ -49,7 +48,6 @@ export default function AuthForm({
     <main className="auth-screen">
       <div className="auth-top">
         <span>PLATAFORMA COELHO</span>
-        <ThemeToggle />
       </div>
       <section className="auth-card">
         <Image

@@ -1,7 +1,7 @@
 export type FocusCommand =
-  | { action: "focus-start"; commandId: string }
+  | { action: "focus-start"; commandId: string; studySessionId?: string }
   | {
-      action: "focus-pause" | "focus-end";
+      action: "focus-pause" | "focus-end" | "focus-abandon";
       commandId: string;
       sessionId: string;
     }
@@ -15,7 +15,7 @@ export type FocusCommand =
 type FocusDependencies = {
   transaction: <T>(work: () => Promise<T>) => Promise<T>;
   call: (
-    command: "start" | "pause" | "resume" | "end" | "sync",
+    command: "start" | "pause" | "resume" | "end" | "abandon" | "sync",
     values: string[],
   ) => Promise<void>;
 };
@@ -37,7 +37,7 @@ export async function executeFocusCommand(
 ) {
   await dependencies.transaction(async () => {
     if (data.action === "focus-start")
-      return dependencies.call("start", [data.commandId]);
+      return dependencies.call("start", [data.commandId, data.studySessionId || ""]);
     if (data.action === "focus-pause")
       return dependencies.call("pause", [data.commandId, data.sessionId]);
     if (data.action === "focus-resume")
@@ -46,7 +46,7 @@ export async function executeFocusCommand(
         data.sessionId,
         data.reason,
       ]);
-    return dependencies.call("end", [data.commandId, data.sessionId]);
+    return dependencies.call(data.action === "focus-abandon" ? "abandon" : "end", [data.commandId, data.sessionId]);
   });
 
   // This second transaction starts only after focus_end_session committed.

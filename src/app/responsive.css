@@ -529,10 +529,13 @@ button:disabled {
     height: 44px;
     min-width: 44px;
   }
-  .theme-toggle {
+  .theme-toggle,
+  .header-focus-timer > summary {
     width: 44px;
     height: 44px;
   }
+  .header-focus-timer > summary { padding:0; }
+  .header-focus-timer > summary span { display:none; }
   .main-content {
     margin-left: 0 !important;
     padding: 24px 16px calc(120px + env(safe-area-inset-bottom)) !important;

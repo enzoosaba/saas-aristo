@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   currentUser,
   createSession,
@@ -17,6 +17,36 @@ import {
   syncTenantMembership,
 } from "@/server/identity";
 export const runtime = "nodejs";
+function authDiagnostic(
+  email: string,
+  stage: "credential-check" | "credential-changed" | "success",
+  details: Record<string, boolean>,
+) {
+  const connectionUrl = process.env.APP_DATABASE_URL || process.env.DATABASE_URL;
+  let databaseFingerprint = "unconfigured";
+  try {
+    const url = new URL(connectionUrl || "");
+    databaseFingerprint = createHash("sha256")
+      .update(`${url.host}${url.pathname}`)
+      .digest("hex")
+      .slice(0, 12);
+  } catch {}
+  console.info(
+    JSON.stringify({
+      event: "auth_login_diagnostic",
+      stage,
+      emailFingerprint: createHash("sha256")
+        .update(email)
+        .digest("hex")
+        .slice(0, 12),
+      databaseFingerprint,
+      databaseRole: process.env.APP_DATABASE_URL ? "app" : "owner",
+      nodeEnv: process.env.NODE_ENV || null,
+      vercelEnv: process.env.VERCEL_ENV || null,
+      ...details,
+    }),
+  );
+}
 const credentials = z
   .object({
     action: z.enum(["login", "register"]),
@@ -143,6 +173,10 @@ export async function POST(request: Request) {
       data.password,
       user?.password || "00000000000000000000000000000000:" + "00".repeat(64),
     );
+    authDiagnostic(data.email, "credential-check", {
+      userFound: !!user,
+      passwordValid: valid,
+    });
     if (!user || !valid)
       throw new HttpError(401, "E-mail ou senha incorretos.");
     // The credential lookup above ran with no actor (that's what it's for —
@@ -153,11 +187,20 @@ export async function POST(request: Request) {
         const current = (await connection
           .prepare("SELECT password FROM users WHERE id=? FOR UPDATE")
           .get(user.id)) as { password: string } | undefined;
-        if (!current || current.password !== user.password)
+        if (!current || current.password !== user.password) {
+          authDiagnostic(data.email, "credential-changed", {
+            userFound: !!current,
+            passwordValid: true,
+          });
           throw new HttpError(401, "A senha foi alterada. Entre novamente.");
+        }
         await createSession(user.id);
       }),
     );
+    authDiagnostic(data.email, "success", {
+      userFound: true,
+      passwordValid: true,
+    });
     return json({ ok: true });
   } catch (e) {
     return failure(e);
